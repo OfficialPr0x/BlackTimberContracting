@@ -1,0 +1,256 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-gold: #c5a880;
+  --color-brand-gold-hover: #b39359;
+  --color-brand-gold-dark: #8c714c;
+  --color-brand-black: #0b0a09;
+  --color-brand-charcoal: #141311;
+  --color-brand-panel: #1b1a17;
+  --color-brand-border: #2c2a25;
+  --color-brand-gray: #a8a29e;
+  --color-brand-wood: #4a3e35;
+  --color-brand-wood-light: #6e5e52;
+
+  /* Typography — clean modern sans across the whole site. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-fade-in-up: fade-in-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-up: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pulse-gold: pulse-gold 2s infinite;
+  --animate-ken-burns: ken-burns 22s ease-in-out infinite alternate;
+  --animate-ken-burns-slow: ken-burns 38s ease-in-out infinite alternate;
+  --animate-marquee: marquee 55s linear infinite;
+  --animate-marquee-slow: marquee 90s linear infinite;
+  --animate-grain: grain 8s steps(10) infinite;
+  --animate-shimmer: shimmer 3.2s linear infinite;
+  --animate-float-y: float-y 9s ease-in-out infinite;
+  --animate-scan-line: scan-line 4.5s linear infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(28px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes pulse-gold {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(197, 168, 128, 0.4); }
+    50% { opacity: 0.9; box-shadow: 0 0 12px 4px rgba(197, 168, 128, 0.6); }
+  }
+  @keyframes ken-burns {
+    0%   { transform: scale(1.05) translate(0, 0); }
+    100% { transform: scale(1.18) translate(-2%, -2%); }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+  @keyframes grain {
+    0%, 100% { transform: translate(0, 0); }
+    10%      { transform: translate(-2%, -3%); }
+    20%      { transform: translate(-4%, 2%); }
+    30%      { transform: translate(2%, -4%); }
+    40%      { transform: translate(-2%, 4%); }
+    50%      { transform: translate(-3%, 1%); }
+    60%      { transform: translate(3%, 0%); }
+    70%      { transform: translate(0%, 3%); }
+    80%      { transform: translate(-3%, -2%); }
+    90%      { transform: translate(2%, 4%); }
+  }
+  @keyframes shimmer {
+    0%   { background-position: -180% 0; }
+    100% { background-position: 180% 0; }
+  }
+  @keyframes float-y {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+  @keyframes scan-line {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    8%   { opacity: 0.55; }
+    100% { transform: translateY(100%); opacity: 0; }
+  }
+}
+
+:root {
+  --background: #0b0a09;
+  --foreground: #f5f4f0;
+
+  /* Live mouse spotlight coords (set by MouseSpotlight component). */
+  --mouse-x: 50%;
+  --mouse-y: 30%;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "kern", "liga", "calt";
+  letter-spacing: -0.005em;
+}
+
+/* Headlines — tight modern tracking for premium feel. */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.022em;
+  font-feature-settings: "kern", "ss01";
+}
+
+/* Mono numerics (prices, phone, percentages) — Geist Mono with tabular figures. */
+.font-mono {
+  font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "kern";
+}
+
+/* ───────────────────────── Scrollbar ───────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track { background: #0b0a09; }
+::-webkit-scrollbar-thumb {
+  background: #2c2a25;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: #c5a880; }
+
+/* ───────────────────────── Before/After slider ───────────────────────── */
+.slider-handle {
+  box-shadow: 0 0 10px rgba(0,0,0,0.5), 0 0 0 4px rgba(197,168,128,0.3);
+}
+
+.canvas-container { touch-action: none; }
+
+/* ───────────────────────── Glass cards ───────────────────────── */
+.glass-panel {
+  background: rgba(20, 19, 17, 0.7);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(197, 168, 128, 0.1);
+}
+.glass-panel-strong {
+  background: rgba(11, 10, 9, 0.55);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid rgba(197, 168, 128, 0.18);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.04),
+    0 30px 60px -20px rgba(0,0,0,0.7);
+}
+.glass-panel-hover {
+  transition: transform .35s cubic-bezier(.16,1,.3,1), background .35s, border-color .35s, box-shadow .35s;
+}
+.glass-panel-hover:hover {
+  background: rgba(20, 19, 17, 0.85);
+  border-color: rgba(197, 168, 128, 0.35);
+  box-shadow: 0 18px 40px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(197,168,128,0.1);
+  transform: translateY(-3px);
+}
+
+/* ───────────────────────── Cinematic gradients ───────────────────────── */
+.cinema-vignette {
+  background:
+    radial-gradient(120% 80% at 50% 35%, transparent 0%, transparent 45%, rgba(0,0,0,0.55) 75%, rgba(0,0,0,0.85) 100%),
+    linear-gradient(180deg, rgba(11,10,9,0.10) 0%, rgba(11,10,9,0.55) 55%, rgba(11,10,9,0.95) 100%);
+}
+.cinema-edge-fade {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+}
+.text-gold-shimmer {
+  background: linear-gradient(90deg, #c5a880 0%, #f7e1bf 35%, #c5a880 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  animation: shimmer 3.2s linear infinite;
+}
+.divider-gold {
+  background: linear-gradient(90deg, transparent 0%, rgba(197,168,128,0.6) 50%, transparent 100%);
+  height: 1px;
+}
+
+/* ───────────────────────── Global mouse spotlight ───────────────────────── */
+.mouse-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(
+    520px circle at var(--mouse-x) var(--mouse-y),
+    rgba(197, 168, 128, 0.10) 0%,
+    rgba(197, 168, 128, 0.04) 35%,
+    transparent 75%
+  );
+  mix-blend-mode: screen;
+  transition: background-color .2s ease-out;
+}
+
+/* ───────────────────────── Film grain ───────────────────────── */
+.film-grain::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/></svg>");
+  opacity: 0.08;
+  pointer-events: none;
+  animation: grain 8s steps(10) infinite;
+  mix-blend-mode: overlay;
+}
+
+/* ───────────────────────── Marquee infinite ───────────────────────── */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee var(--marquee-duration, 55s) linear infinite;
+}
+.marquee-pause:hover .marquee-track { animation-play-state: paused; }
+
+/* ───────────────────────── Scroll snap horizontal ───────────────────────── */
+.snap-x-mandatory {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.snap-x-mandatory::-webkit-scrollbar { display: none; }
+.snap-start { scroll-snap-align: start; }
+.snap-center { scroll-snap-align: center; }
+
+/* ───────────────────────── Section reveal (scroll-driven) ───────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(40px);
+    animation: fade-in-up 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+}
+
+/* Soft section divider used between dark blocks. */
+.section-edge-top {
+  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.6) 100%);
+}
+.section-edge-bot {
+  background: linear-gradient(0deg, transparent 0%, rgba(0,0,0,0.6) 100%);
+}
+
+/* Tilted accent dividers between sections. */
+.skew-divider {
+  height: 56px;
+  background: linear-gradient(180deg, var(--color-brand-charcoal) 0%, var(--color-brand-black) 100%);
+  clip-path: polygon(0 0, 100% 18%, 100% 100%, 0 82%);
+}

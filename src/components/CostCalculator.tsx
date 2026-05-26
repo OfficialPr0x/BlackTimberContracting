@@ -1,10 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
-import { Calculator, ArrowRight, Sliders, Shield, BadgeDollarSign, Lock } from "lucide-react";
+import { Calculator, ArrowRight, Sliders, Shield, BadgeDollarSign, Lock, Sparkles, Loader } from "lucide-react";
 
 interface CostCalculatorProps {
   onTriggerQuote: () => void;
+}
+
+interface AiExplainResult {
+  narrative: string;
+  adjustedRangeUSD: { min: number; max: number };
+  experienceNote: string;
+  callouts: string[];
 }
 
 type Material = "treated" | "cedar" | "composite";
@@ -51,27 +58,74 @@ export default function CostCalculator({ onTriggerQuote }: CostCalculatorProps) 
     posts: true,
   });
 
-  const toggle = (key: keyof UpgradeState) =>
-    setUpgrades((prev) => ({ ...prev, [key]: !prev[key] }));
+  const [aiExplain, setAiExplain] = useState<AiExplainResult | null>(null);
+  const [aiPending, setAiPending] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
-  const calc = () => {
+  const toggle = (key: keyof UpgradeState) => {
+    setUpgrades((prev) => ({ ...prev, [key]: !prev[key] }));
+    // Invalidate stale AI explanation on any config change.
+    setAiExplain(null);
+    setAiError(null);
+  };
+
+  const requestAiExplain = async () => {
+    setAiPending(true);
+    setAiError(null);
+    setAiExplain(null);
+    try {
+      const res = await fetch("/api/ai/explain-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          length: dimensions.length,
+          width: dimensions.width,
+          material,
+          upgrades,
+          deterministicRangeUSD: { min: rawMin(), max: rawMax() },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
+        throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
+      }
+      setAiExplain((await res.json()) as AiExplainResult);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI sanity-check failed");
+    } finally {
+      setAiPending(false);
+    }
+  };
+
+  const rawSubtotal = () => {
     const area = dimensions.length * dimensions.width;
     let cost = area * MATERIAL_BASE[material];
     (Object.keys(upgrades) as (keyof UpgradeState)[]).forEach((k) => {
       if (upgrades[k]) cost += UPGRADE_COSTS[k];
     });
-    const min = Math.round(cost * 0.95);
-    const max = Math.round(cost * 1.15);
+    return cost;
+  };
+  const rawMin = () => Math.round(rawSubtotal() * 0.95);
+  const rawMax = () => Math.round(rawSubtotal() * 1.15);
+
+  const calc = () => {
+    const area = dimensions.length * dimensions.width;
+    const cost = rawSubtotal();
+    // Prefer AI-adjusted range when we have one.
+    const min = aiExplain?.adjustedRangeUSD.min ?? rawMin();
+    const max = aiExplain?.adjustedRangeUSD.max ?? rawMax();
     const materialCost = Math.round(cost * 0.45);
     const laborCost = Math.round(cost * 0.40);
     const permitCost = Math.round(cost * 0.15);
+    const fmt = (n: number) =>
+      n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
     return {
-      min: min.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
-      max: max.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
+      min: fmt(min),
+      max: fmt(max),
       area,
-      materialCost: materialCost.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
-      laborCost: laborCost.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
-      permitCost: permitCost.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
+      materialCost: fmt(materialCost),
+      laborCost: fmt(laborCost),
+      permitCost: fmt(permitCost),
       midpoint: Math.round((min + max) / 2),
     };
   };
@@ -269,19 +323,74 @@ export default function CostCalculator({ onTriggerQuote }: CostCalculatorProps) 
               </div>
             </div>
 
+            {/* AI sanity-check panel */}
             <div className="p-4 rounded-xl bg-brand-panel border border-brand-border space-y-2">
-              <span className="text-[10px] text-brand-gold font-bold uppercase tracking-wider">Black Timber Guarantee</span>
-              <ul className="text-[10px] text-brand-gray space-y-1.5 leading-relaxed">
-                <li className="flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-brand-gold" /> No corner cutting policy strictly enforced.
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-brand-gold" /> Helical pile foundations — no sagging.
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-brand-gold" /> 5-Year structural warranty in writing.
-                </li>
-              </ul>
+              {!aiExplain && !aiPending && !aiError && (
+                <>
+                  <span className="text-[10px] text-brand-gold font-bold uppercase tracking-wider">Black Timber Guarantee</span>
+                  <ul className="text-[10px] text-brand-gray space-y-1.5 leading-relaxed">
+                    <li className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-brand-gold" /> No corner cutting policy strictly enforced.
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-brand-gold" /> Helical pile foundations — no sagging.
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-brand-gold" /> 5-Year structural warranty in writing.
+                    </li>
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={requestAiExplain}
+                    className="mt-2 w-full px-3 py-2 border border-brand-gold/40 hover:bg-brand-gold/10 text-brand-gold text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Have AI sanity-check this price
+                  </button>
+                </>
+              )}
+
+              {aiPending && (
+                <div className="flex items-center justify-center gap-2 py-4 text-[11px] text-brand-gold uppercase tracking-widest font-bold">
+                  <Loader className="w-3.5 h-3.5 animate-spin" />
+                  AI reviewing your config…
+                </div>
+              )}
+
+              {aiError && (
+                <div className="space-y-2">
+                  <div className="text-[10px] text-red-400">{aiError}</div>
+                  <button
+                    type="button"
+                    onClick={requestAiExplain}
+                    className="text-[10px] text-brand-gold underline uppercase tracking-widest"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {aiExplain && (
+                <div className="space-y-2 animate-slide-up">
+                  <span className="text-[10px] text-brand-gold font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" /> AI sanity-check
+                  </span>
+                  <p className="text-[11px] text-brand-gray leading-relaxed">
+                    {aiExplain.narrative}
+                  </p>
+                  <p className="text-[10px] text-white italic leading-relaxed pt-1 border-t border-brand-border/40">
+                    {aiExplain.experienceNote}
+                  </p>
+                  <ul className="text-[10px] text-brand-gray space-y-1 pt-1">
+                    {aiExplain.callouts.map((c, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <span className="w-1 h-1 rounded-full bg-brand-gold mt-1.5 flex-shrink-0" />
+                        <span>{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
 

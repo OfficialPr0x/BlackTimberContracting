@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ShieldAlert,
   Compass,
@@ -18,126 +18,139 @@ import {
   Home,
 } from "lucide-react";
 
+// Mirrors SiteIntelOutput from src/lib/openrouter/schemas.ts. Kept narrow
+// (only the fields we render) so we don't bring zod into the client bundle.
 interface ScanReport {
   address: string;
-  slope: string;
-  slopeDifficulty: string;
-  elevation: string;
-  permitZoning: string;
-  snowLoad: string;
-  sunlight: string;
-  wind: string;
-  permitRecommendation: string;
+  resolvedLocation: string;
+  region: string;
+  terrain: {
+    slopePercent: number;
+    slopeDifficulty: "mild" | "moderate" | "steep" | "extreme";
+    elevationMeters: number;
+  };
+  climate: {
+    snowLoadKPa: number;
+    snowLoadCategory: "standard" | "heavy" | "extreme";
+    frostLineInches: number;
+    sunHoursPerDay: number;
+    windCategory: "sheltered" | "moderate" | "alpine_exposed";
+  };
+  permitting: { authority: string; typicalRequirements: string; needsEngineerStamp: boolean };
   suggestedMaterials: string[];
   styleInspirations: { city: string; style: string }[];
+  confidence: "high" | "medium" | "low";
 }
+
+const SLOPE_DIFFICULTY_LABEL: Record<ScanReport["terrain"]["slopeDifficulty"], string> = {
+  mild: "Standard concrete pier pads viable",
+  moderate: "Concrete piers + careful framing",
+  steep: "Requires engineered helical piles",
+  extreme: "Engineering stamp + heli-pile foundation",
+};
+
+const SNOW_CATEGORY_LABEL: Record<ScanReport["climate"]["snowLoadCategory"], string> = {
+  standard: "Standard",
+  heavy: "Heavy",
+  extreme: "Extremely Heavy",
+};
+
+const WIND_LABEL: Record<ScanReport["climate"]["windCategory"], string> = {
+  sheltered: "Sheltered",
+  moderate: "Moderate exposure",
+  alpine_exposed: "Alpine — gusts 70+ km/h",
+};
 
 export default function ProjectCheck() {
   const [address, setAddress] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState("");
   const [scanReport, setScanReport] = useState<ScanReport | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [emailInput, setEmailInput] = useState({ name: "", email: "", phone: "" });
-  const [reportDownloaded, setReportDownloaded] = useState(false);
+  const [reportSent, setReportSent] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportPending, setReportPending] = useState(false);
 
   const scanSteps = [
-    "Locating property on BC Geographic database…",
-    "Pulling satellite topography & slope variance…",
-    "Cross-checking East Kootenay climate archives…",
-    "Calculating elevation, frost line, and wind exposure…",
-    "Reviewing Region 4 snow load + municipal zoning…",
-    "Matching to 140+ Black Timber portfolio builds…",
+    "Geocoding property on BC Geographic database…",
+    "Pulling elevation + slope from terrain models…",
+    "Querying snow load + frost line for this latitude…",
+    "Looking up permit authority + zoning rules…",
+    "Matching nearby Black Timber-style references…",
   ];
 
-  const handleScan = (ev: React.FormEvent) => {
+  // Rotate the log lines while the request is in flight — purely cosmetic,
+  // but honest (each line is something the model is actually doing).
+  useEffect(() => {
+    if (!isScanning) return;
+    let i = 0;
+    setScanStep(scanSteps[0]);
+    const t = setInterval(() => {
+      i = (i + 1) % scanSteps.length;
+      setScanStep(scanSteps[i]);
+    }, 1400);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScanning]);
+
+  const handleScan = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    if (!address) return;
+    if (!address.trim()) return;
 
     setIsScanning(true);
     setScanReport(null);
-    let idx = 0;
-    setScanStep(scanSteps[0]);
+    setScanError(null);
 
-    const stepInterval = setInterval(() => {
-      idx++;
-      if (idx < scanSteps.length) {
-        setScanStep(scanSteps[idx]);
-      } else {
-        clearInterval(stepInterval);
-        setIsScanning(false);
-
-        const isFernie  = address.toLowerCase().includes("fernie");
-        const isKelowna = address.toLowerCase().includes("kelowna");
-        const isNelson  = address.toLowerCase().includes("nelson");
-
-        setScanReport({
-          address,
-          slope: isFernie ? "8.4% (Steep Slope)" : isNelson ? "5.2% (Moderate)" : "3.1% (Mild)",
-          slopeDifficulty: isFernie
-            ? "Requires engineered helical piles"
-            : "Standard concrete pier pads viable",
-          elevation: isFernie
-            ? "1,010m (High Alpine)"
-            : isKelowna
-            ? "344m (Valley Basin)"
-            : isNelson
-            ? "535m (Lakeside)"
-            : "910m (High Elevation)",
-          permitZoning: isFernie
-            ? "Regional District East Kootenay (RDEK) BP-2"
-            : "Municipal Standard Zone R-1",
-          snowLoad: isFernie
-            ? "7.2 kPa (Extremely Heavy)"
-            : isKelowna
-            ? "2.2 kPa (Standard)"
-            : "4.8 kPa (Heavy)",
-          sunlight: isKelowna ? "9.4 hrs/day (Excellent)" : "7.2 hrs/day (Moderate)",
-          wind: isFernie ? "Gusts 70+ km/h (Alpine Exposure)" : "Avg 18 km/h (Sheltered)",
-          permitRecommendation: isFernie
-            ? "Requires structural engineering stamp — Black Timber handles end-to-end."
-            : "Standard residential permit. Black Timber files on your behalf.",
-          suggestedMaterials: isFernie
-            ? [
-                "Doug-fir 8x8 timber posts (snow-load grade)",
-                "Composite decking (no swelling at altitude)",
-                "Steel cable railings (low wind drag)",
-                "Polycarbonate roof panels (snow shed)",
-              ]
-            : isKelowna
-            ? [
-                "Western Red Cedar (UV-resistant finish)",
-                "Glass tempered railings (lakeview)",
-                "Pergola w/ louvered top",
-                "Integrated low-voltage LED layout",
-              ]
-            : [
-                "Western Red Cedar planks",
-                "Black aluminum railings",
-                "Cedar privacy wall (eastern exposure)",
-                "Helical screw piles to 48\" depth",
-              ],
-          styleInspirations: isFernie
-            ? [
-                { city: "Sparwood", style: "Steel + Timber Mountain Modern" },
-                { city: "Elkford",  style: "Screened Gazebo Retreat" },
-              ]
-            : isKelowna
-            ? [
-                { city: "Kelowna",  style: "Lakeside Cedar Composite" },
-                { city: "Penticton", style: "Wine Country Pergola" },
-              ]
-            : [
-                { city: "Cranbrook", style: "Multi-Level Sun Deck" },
-                { city: "Nelson",    style: "Heritage Wrap Porch" },
-              ],
-        });
+    try {
+      const res = await fetch("/api/ai/site-intel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
+        throw new Error(body?.error?.message ?? `Scan failed (${res.status})`);
       }
-    }, 700);
+      const data = (await res.json()) as Omit<ScanReport, "address"> & { resolvedLocation: string };
+      setScanReport({ ...data, address });
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Scan failed");
+    } finally {
+      setIsScanning(false);
+    }
   };
 
-  const handleDownload = (ev: React.FormEvent) => {
+  const handleDownload = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    setReportDownloaded(true);
+    if (!scanReport) return;
+    setReportPending(true);
+    setReportError(null);
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "site_intel_report",
+          contact: {
+            name: emailInput.name,
+            email: emailInput.email,
+            phone: emailInput.phone,
+            address,
+          },
+          payload: { report: scanReport },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
+        throw new Error(body?.error?.message ?? `Submit failed (${res.status})`);
+      }
+      setReportSent(true);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Submit failed");
+    } finally {
+      setReportPending(false);
+    }
   };
 
   return (
@@ -159,25 +172,32 @@ export default function ProjectCheck() {
 
       <div className="bg-brand-panel p-6 sm:p-8 rounded-2xl border border-brand-border space-y-6 shadow-xl">
         {!scanReport && !isScanning && (
-          <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <MapPin className="absolute left-3.5 top-3.5 w-5 h-5 text-brand-gold" />
-              <input
-                type="text"
-                placeholder="Property address (e.g., 402 Dicken Rd, Fernie, BC)"
-                required
-                value={address}
-                onChange={(ev) => setAddress(ev.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 bg-brand-black border border-brand-border focus:border-brand-gold focus:outline-none rounded-xl text-sm text-white placeholder:text-brand-gray transition-all"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-8 py-3.5 bg-brand-gold hover:bg-brand-gold-hover text-brand-black font-extrabold uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all"
-            >
-              Run Intelligence Scan
-            </button>
-          </form>
+          <>
+            <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <MapPin className="absolute left-3.5 top-3.5 w-5 h-5 text-brand-gold" />
+                <input
+                  type="text"
+                  placeholder="Property address (e.g., 402 Dicken Rd, Fernie, BC)"
+                  required
+                  value={address}
+                  onChange={(ev) => setAddress(ev.target.value)}
+                  className="w-full pl-12 pr-4 py-3.5 bg-brand-black border border-brand-border focus:border-brand-gold focus:outline-none rounded-xl text-sm text-white placeholder:text-brand-gray transition-all"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-8 py-3.5 bg-brand-gold hover:bg-brand-gold-hover text-brand-black font-extrabold uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all"
+              >
+                Run Intelligence Scan
+              </button>
+            </form>
+            {scanError && (
+              <div className="mt-3 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded p-3">
+                {scanError}
+              </div>
+            )}
+          </>
         )}
 
         {isScanning && (
@@ -194,21 +214,66 @@ export default function ProjectCheck() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-slide-up">
             {/* Indicators (left, 2 cols) */}
             <div className="lg:col-span-2 space-y-4">
-              <div className="flex items-center space-x-2 pb-2 border-b border-brand-border">
-                <FileText className="w-5 h-5 text-brand-gold" />
-                <h4 className="font-bold text-white uppercase tracking-wider text-sm">
-                  Intelligence Brief — {scanReport.address}
-                </h4>
+              <div className="flex items-center justify-between pb-2 border-b border-brand-border">
+                <div className="flex items-center space-x-2">
+                  <FileText className="w-5 h-5 text-brand-gold" />
+                  <h4 className="font-bold text-white uppercase tracking-wider text-sm">
+                    Intelligence Brief — {scanReport.resolvedLocation || scanReport.address}
+                  </h4>
+                </div>
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                    scanReport.confidence === "high"
+                      ? "border-green-500/40 text-green-400 bg-green-500/10"
+                      : scanReport.confidence === "medium"
+                      ? "border-brand-gold/40 text-brand-gold bg-brand-gold/10"
+                      : "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                  }`}
+                >
+                  {scanReport.confidence} confidence
+                </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  { icon: Compass,     label: "Terrain Slope",       value: scanReport.slope,       sub: scanReport.slopeDifficulty },
-                  { icon: Mountain,    label: "Elevation",           value: scanReport.elevation,   sub: "Affects framing & material drying cycles" },
-                  { icon: Sun,         label: "Sun Exposure",        value: scanReport.sunlight,    sub: "Estimating cedar UV protection cycles" },
-                  { icon: Wind,        label: "Wind Exposure",       value: scanReport.wind,        sub: "Drives anchor + railing spec" },
-                  { icon: ShieldAlert, label: "Snow Load Capacity",  value: scanReport.snowLoad,    sub: "Requires ledger bolting reinforcement" },
-                  { icon: MapPin,      label: "Permit Authority",    value: scanReport.permitZoning,sub: scanReport.permitRecommendation },
+                  {
+                    icon: Compass,
+                    label: "Terrain Slope",
+                    value: `${scanReport.terrain.slopePercent.toFixed(1)}% (${scanReport.terrain.slopeDifficulty})`,
+                    sub: SLOPE_DIFFICULTY_LABEL[scanReport.terrain.slopeDifficulty],
+                  },
+                  {
+                    icon: Mountain,
+                    label: "Elevation",
+                    value: `${scanReport.terrain.elevationMeters.toLocaleString()}m`,
+                    sub: `Frost line: ${scanReport.climate.frostLineInches}" footing depth`,
+                  },
+                  {
+                    icon: Sun,
+                    label: "Sun Exposure",
+                    value: `${scanReport.climate.sunHoursPerDay.toFixed(1)} hrs/day`,
+                    sub: "Drives cedar UV protection + finish cycles",
+                  },
+                  {
+                    icon: Wind,
+                    label: "Wind Exposure",
+                    value: WIND_LABEL[scanReport.climate.windCategory],
+                    sub: "Drives anchor + railing spec",
+                  },
+                  {
+                    icon: ShieldAlert,
+                    label: "Snow Load",
+                    value: `${scanReport.climate.snowLoadKPa.toFixed(1)} kPa (${SNOW_CATEGORY_LABEL[scanReport.climate.snowLoadCategory]})`,
+                    sub: "BC Building Code structural requirement",
+                  },
+                  {
+                    icon: MapPin,
+                    label: "Permit Authority",
+                    value: scanReport.permitting.authority,
+                    sub: scanReport.permitting.needsEngineerStamp
+                      ? "Engineer stamp required — we handle it"
+                      : "Standard residential pathway",
+                  },
                 ].map((m) => (
                   <div key={m.label} className="p-3.5 rounded-xl bg-brand-black border border-brand-border flex items-start gap-3">
                     <m.icon className="w-5 h-5 text-brand-gold shrink-0 mt-0.5" />
@@ -220,6 +285,13 @@ export default function ProjectCheck() {
                   </div>
                 ))}
               </div>
+
+              {scanReport.permitting.typicalRequirements && (
+                <p className="text-xs text-brand-gray bg-brand-black border border-brand-border rounded-lg p-3 leading-relaxed">
+                  <strong className="text-brand-gold uppercase tracking-wider text-[10px] block mb-1">Permitting note</strong>
+                  {scanReport.permitting.typicalRequirements}
+                </p>
+              )}
 
               {/* Suggested materials + style inspirations row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -265,7 +337,7 @@ export default function ProjectCheck() {
                 </p>
               </div>
 
-              {!reportDownloaded ? (
+              {!reportSent ? (
                 <form onSubmit={handleDownload} className="space-y-2.5">
                   <div className="relative">
                     <User className="absolute left-2.5 top-2.5 w-4 h-4 text-brand-gray" />
@@ -300,34 +372,37 @@ export default function ProjectCheck() {
                       className="w-full bg-brand-charcoal border border-brand-border focus:border-brand-gold focus:outline-none pl-9 pr-3 py-2 text-xs text-white rounded"
                     />
                   </div>
+                  {reportError && (
+                    <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2">
+                      {reportError}
+                    </div>
+                  )}
                   <button
                     type="submit"
-                    className="w-full py-2.5 bg-brand-gold hover:bg-brand-gold-hover text-brand-black font-bold uppercase tracking-widest text-[10px] rounded transition-all"
+                    disabled={reportPending}
+                    className="w-full py-2.5 bg-brand-gold hover:bg-brand-gold-hover disabled:opacity-50 text-brand-black font-bold uppercase tracking-widest text-[10px] rounded transition-all flex items-center justify-center gap-1.5"
                   >
-                    Email Me The Full PDF
+                    {reportPending ? (
+                      <>
+                        <Loader className="w-3 h-3 animate-spin" /> Sending…
+                      </>
+                    ) : (
+                      <>Email Me The Full Brief</>
+                    )}
                   </button>
                 </form>
               ) : (
                 <div className="p-4 bg-brand-charcoal border border-brand-gold/30 rounded text-center space-y-3">
                   <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto" />
                   <div>
-                    <div className="text-xs font-bold text-white uppercase">Report Ready!</div>
-                    <div className="text-[10px] text-brand-gray mt-1">PDF sent to {emailInput.email}</div>
+                    <div className="text-xs font-bold text-white uppercase">Brief Sent To Jaryd</div>
+                    <div className="text-[10px] text-brand-gray mt-1">We&apos;ll email your detailed brief to {emailInput.email} within one business day.</div>
                   </div>
-                  <a
-                    href="#download"
-                    onClick={(ev) => {
-                      ev.preventDefault();
-                      alert("Simulating PDF download for: " + address);
-                    }}
-                    className="inline-block px-4 py-2 bg-brand-gold text-brand-black hover:bg-brand-gold-hover rounded font-bold uppercase text-[9px] tracking-widest transition-all"
-                  >
-                    Download PDF
-                  </a>
                   <button
                     onClick={() => {
                       setScanReport(null);
-                      setReportDownloaded(false);
+                      setReportSent(false);
+                      setReportError(null);
                       setAddress("");
                       setEmailInput({ name: "", email: "", phone: "" });
                     }}

@@ -2,21 +2,35 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import { Paintbrush, Eraser, RotateCcw, Sparkles, Check } from "lucide-react";
-import { DRAW_RENDER_PHOTOS } from "@/data/jobPhotos";
+
+type Template = "deck" | "fence" | "garage" | "pergola";
+
+interface AiSketchResult {
+  interpretation: string;
+  detectedFeatures: string[];
+  approximateDimensions: { length: number; width: number; notes?: string };
+  matchReason: string;
+  recommendedUpgrades: string[];
+  bestPortfolioMatchUrl: string;
+  // True when the server returned a deterministic portfolio match because
+  // the AI was unavailable. UI uses this to soften the language.
+  usedFallback?: boolean;
+}
 
 export default function DrawItOut() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [color, setColor] = useState("#c5a880"); // Gold brush color
+  const [color] = useState("#c5a880"); // Gold brush color
   const [brushSize, setBrushSize] = useState(4);
   const [tool, setTool] = useState<"draw" | "erase">("draw");
   const [isRendering, setIsRendering] = useState(false);
-  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [renderedImage, setRenderedImage] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("deck");
+  const [renderResult, setRenderResult] = useState<AiSketchResult | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template>("deck");
 
   // Load template lines onto the canvas
-  const drawTemplate = (templateType: string) => {
+  const drawTemplate = (templateType: Template) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -25,6 +39,8 @@ export default function DrawItOut() {
     // Clear canvas first
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setRenderedImage(null);
+    setRenderResult(null);
+    setRenderError(null);
     setSelectedTemplate(templateType);
 
     // Apply canvas settings
@@ -161,32 +177,48 @@ export default function DrawItOut() {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setRenderedImage(null);
+    setRenderResult(null);
+    setRenderError(null);
   };
 
-  const handleAiRender = () => {
-    setIsRendering(true);
-    setRenderProgress(0);
+  const handleAiRender = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const interval = setInterval(() => {
-      setRenderProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsRendering(false);
-          // Photorealistic outputs use real Black Timber builds per template.
-          if (selectedTemplate === "deck") {
-            setRenderedImage(DRAW_RENDER_PHOTOS[0]);
-          } else if (selectedTemplate === "fence") {
-            setRenderedImage(DRAW_RENDER_PHOTOS[1]);
-          } else if (selectedTemplate === "garage") {
-            setRenderedImage(DRAW_RENDER_PHOTOS[2]);
-          } else {
-            setRenderedImage(DRAW_RENDER_PHOTOS[3]);
-          }
-          return 100;
-        }
-        return prev + 10;
+    setIsRendering(true);
+    setRenderError(null);
+    setRenderResult(null);
+
+    try {
+      // Composite the sketch over a solid dark background — most models do
+      // better on a clear background than on transparent PNGs.
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = canvas.width;
+      exportCanvas.height = canvas.height;
+      const exportCtx = exportCanvas.getContext("2d");
+      if (!exportCtx) throw new Error("Canvas export failed");
+      exportCtx.fillStyle = "#0a0a0a";
+      exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+      exportCtx.drawImage(canvas, 0, 0);
+      const sketchDataUrl = exportCanvas.toDataURL("image/png");
+
+      const res = await fetch("/api/ai/draw-render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sketchDataUrl, template: selectedTemplate }),
       });
-    }, 200);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
+        throw new Error(body?.error?.message ?? `Render failed (${res.status})`);
+      }
+      const data = (await res.json()) as AiSketchResult;
+      setRenderResult(data);
+      setRenderedImage(data.bestPortfolioMatchUrl);
+    } catch (err) {
+      setRenderError(err instanceof Error ? err.message : "AI sketch interpretation failed");
+    } finally {
+      setIsRendering(false);
+    }
   };
 
   return (
@@ -314,48 +346,60 @@ export default function DrawItOut() {
             }`}
           />
 
-          {/* AI RENDER RESULT OVERLAY */}
+          {/* AI RENDER RESULT OVERLAY — matched portfolio photo + interpretation */}
           {renderedImage && (
             <div className="absolute inset-0 w-full h-full animate-fade-in">
-              <img 
-                src={renderedImage} 
-                alt="AI Photorealistic Render" 
+              <img
+                src={renderedImage}
+                alt="Closest Black Timber Portfolio Match"
                 className="w-full h-full object-cover"
               />
-              <div className="absolute top-4 right-4 bg-brand-gold text-brand-black px-3 py-1 text-[10px] font-bold tracking-widest uppercase rounded shadow flex items-center gap-1">
-                <Check className="w-3 h-3" /> AI Render Complete
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/85 to-transparent p-4 sm:p-5 space-y-2">
+                {renderResult && (
+                  <>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-brand-gold flex items-center gap-1.5">
+                      <Check className="w-3 h-3" /> Matched · {renderResult.detectedFeatures.length} features detected
+                    </div>
+                    <p className="text-xs text-white leading-relaxed line-clamp-3">{renderResult.matchReason}</p>
+                  </>
+                )}
               </div>
-              {/* Back to Canvas action */}
-              <div className="absolute bottom-4 left-4 flex gap-2">
+              <div
+                className={`absolute top-4 right-4 px-3 py-1 text-[10px] font-bold tracking-widest uppercase rounded shadow flex items-center gap-1 ${
+                  renderResult?.usedFallback
+                    ? "bg-brand-charcoal text-brand-gold border border-brand-gold/40"
+                    : "bg-brand-gold text-brand-black"
+                }`}
+              >
+                <Check className="w-3 h-3" />
+                {renderResult?.usedFallback ? "Portfolio Reference" : "AI Portfolio Match"}
+              </div>
+              <div className="absolute bottom-4 left-4 flex gap-2 hidden sm:hidden">
+                {/* (moved below) */}
+              </div>
+              <div className="absolute top-4 left-4">
                 <button
-                  onClick={() => setRenderedImage(null)}
+                  onClick={clearCanvas}
                   className="px-4 py-2 bg-black/80 hover:bg-black text-white text-[10px] font-bold tracking-widest uppercase rounded border border-brand-border shadow transition-all"
                 >
-                  Edit Drawing Sketch
+                  Edit Sketch
                 </button>
               </div>
             </div>
           )}
 
-          {/* RENDERING PROGRESS LOADER OVERLAY */}
+          {/* RENDERING LOADER OVERLAY */}
           {isRendering && (
             <div className="absolute inset-0 z-30 bg-black/95 flex flex-col items-center justify-center p-6 space-y-4 animate-fade-in">
-              <div className="w-2/3 max-w-sm space-y-2">
-                <div className="flex justify-between items-center text-[10px] font-bold text-brand-gold uppercase tracking-widest">
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                    Converting coordinates to 3D mesh...
-                  </span>
-                  <span>{renderProgress}%</span>
+              <Sparkles className="w-8 h-8 text-brand-gold animate-spin" />
+              <div className="text-center space-y-1">
+                <div className="text-[11px] font-bold text-brand-gold uppercase tracking-widest">
+                  Vision AI reading your sketch…
                 </div>
-                <div className="w-full bg-brand-border h-1.5 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-brand-gold h-full transition-all duration-300 rounded-full" 
-                    style={{ width: `${renderProgress}%` }}
-                  />
+                <div className="text-[10px] text-brand-gray font-mono">
+                  Detecting features · sizing · matching to portfolio
                 </div>
               </div>
-              <span className="text-[10px] text-brand-gray font-mono">Diffusion processing... Region constraints verified.</span>
             </div>
           )}
 
@@ -368,15 +412,61 @@ export default function DrawItOut() {
         </div>
       </div>
 
+      {/* AI Interpretation panel — shown after a successful render */}
+      {renderResult && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 animate-slide-up">
+          <div className="md:col-span-2 bg-brand-panel border border-brand-border rounded-xl p-4 space-y-2">
+            <span className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">
+              What our AI saw in your sketch
+            </span>
+            <p className="text-xs text-brand-gray leading-relaxed">{renderResult.interpretation}</p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {renderResult.detectedFeatures.map((f, i) => (
+                <span
+                  key={i}
+                  className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-brand-border text-brand-gray"
+                >
+                  {f}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="bg-brand-panel border border-brand-border rounded-xl p-4 space-y-2">
+            <span className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">
+              Approx. size · upgrades to consider
+            </span>
+            <div className="text-xs text-white font-mono">
+              {renderResult.approximateDimensions.length > 0 || renderResult.approximateDimensions.width > 0
+                ? `${renderResult.approximateDimensions.length} × ${renderResult.approximateDimensions.width} ft`
+                : "Scale not visible"}
+            </div>
+            <ul className="text-[11px] text-brand-gray space-y-1 pt-1">
+              {renderResult.recommendedUpgrades.slice(0, 4).map((u, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-brand-gold mt-1.5 flex-shrink-0" />
+                  <span>{u}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {renderError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded p-3">
+          {renderError}
+        </div>
+      )}
+
       {/* Render Trigger CTA */}
       <div className="flex justify-end pt-2">
         <button
           onClick={handleAiRender}
           disabled={isRendering || renderedImage !== null}
-          className="w-full sm:w-auto px-8 py-4 bg-brand-gold hover:bg-brand-gold-hover text-brand-black font-bold uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-8 py-4 bg-brand-gold hover:bg-brand-gold-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-black font-bold uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
         >
           <Sparkles className="w-4 h-4 fill-brand-black" />
-          Render drawing with Black Timber AI
+          {isRendering ? "Analyzing sketch…" : "Match my sketch with Black Timber AI"}
         </button>
       </div>
     </section>

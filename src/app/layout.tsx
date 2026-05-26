@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import ConciergeChat from "@/components/ConciergeChat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +22,7 @@ const LOGO_URL =
 
 // Branded full-logo-on-black mark for social share previews.
 const SHARE_IMAGE =
-  "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1779589045/ChatGPT_Image_May_23_2026_08_07_11_PM_m3hfi0.png";
+  "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1779589045/ChatGPT_Image_May_23_2026_08_12_15_PM_x6xmat.png";
 
 export const metadata: Metadata = {
   title: "Black Timber Contracting | Kootenay Custom Decks & Construction",
@@ -56,6 +57,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-brand-black text-foreground selection:bg-brand-gold selection:text-brand-black">
         {children}
+        <ConciergeChat />
       </body>
     </html>
   );

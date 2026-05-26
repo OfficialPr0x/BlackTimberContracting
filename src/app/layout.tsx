@@ -13,12 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 // In-site logo — transparent PNG, sits on dark header/footer.
+// (Browser tab favicon + Apple touch icon are handled by src/app/icon.png and
+// src/app/apple-icon.png via the Next.js file convention. Do NOT also define
+// `metadata.icons` here — it would override the file-convention output.)
 const LOGO_URL =
   "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1779592928/ChatGPT_Image_May_23__2026__08_07_11_PM-removebg-preview_f81lz0.png";
 
-// Favicon / Apple touch / OG share — full logo on its own black background so it
-// stays legible at tiny browser-tab sizes and previews cleanly on light backgrounds.
-const ICON_URL =
+// Branded full-logo-on-black mark for social share previews.
+const SHARE_IMAGE =
   "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1779589045/ChatGPT_Image_May_23_2026_08_07_11_PM_m3hfi0.png";
 
 export const metadata: Metadata = {
@@ -34,15 +36,10 @@ export const metadata: Metadata = {
     "instant quote contractor",
   ],
   authors: [{ name: "Black Timber Contracting" }],
-  icons: {
-    icon: ICON_URL,
-    shortcut: ICON_URL,
-    apple: ICON_URL,
-  },
   openGraph: {
     title: "Black Timber Contracting",
     description: "Real Work. Real Standards. Real Results. Kootenay-built craftsmanship serving BC-wide.",
-    images: [{ url: ICON_URL, alt: "Black Timber Contracting" }],
+    images: [{ url: SHARE_IMAGE, alt: "Black Timber Contracting" }],
     type: "website",
   },
 };

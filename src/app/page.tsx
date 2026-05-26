@@ -43,6 +43,7 @@ import BeforeAfterWall from "@/components/BeforeAfterWall";
 import MeetJaryd from "@/components/MeetJaryd";
 import WhyProjectsGoWrong from "@/components/WhyProjectsGoWrong";
 import AnimatedCounter from "@/components/AnimatedCounter";
+import JobGallery from "@/components/JobGallery";
 
 export default function Home() {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
@@ -329,8 +330,13 @@ export default function Home() {
         <MeetJaryd onTriggerQuote={() => triggerQuote(1)} />
       </section>
 
-      {/* ─────────────── WHY PROJECTS GO WRONG (trust destroyer) ─────────────── */}
+      {/* ─────────────── REAL JOB PHOTOS GALLERY ─────────────── */}
       <section className="py-20 sm:py-28 bg-brand-charcoal border-y border-brand-border">
+        <JobGallery onTriggerQuote={() => triggerQuote(1)} />
+      </section>
+
+      {/* ─────────────── WHY PROJECTS GO WRONG (trust destroyer) ─────────────── */}
+      <section className="py-20 sm:py-28 bg-brand-black border-y border-brand-border">
         <WhyProjectsGoWrong />
       </section>
 

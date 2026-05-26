@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { Paintbrush, Eraser, RotateCcw, Sparkles, Check, Download } from "lucide-react";
+import { Paintbrush, Eraser, RotateCcw, Sparkles, Check } from "lucide-react";
+import { DRAW_RENDER_PHOTOS } from "@/data/jobPhotos";
 
 export default function DrawItOut() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -171,15 +172,15 @@ export default function DrawItOut() {
         if (prev >= 100) {
           clearInterval(interval);
           setIsRendering(false);
-          // Set photorealistic outputs based on template chosen
+          // Photorealistic outputs use real Black Timber builds per template.
           if (selectedTemplate === "deck") {
-            setRenderedImage("/deck_cranbrook.png");
+            setRenderedImage(DRAW_RENDER_PHOTOS[0]);
           } else if (selectedTemplate === "fence") {
-            setRenderedImage("/after.png");
+            setRenderedImage(DRAW_RENDER_PHOTOS[1]);
           } else if (selectedTemplate === "garage") {
-            setRenderedImage("/hero_bg.png");
+            setRenderedImage(DRAW_RENDER_PHOTOS[2]);
           } else {
-            setRenderedImage("/patio_fernie.png");
+            setRenderedImage(DRAW_RENDER_PHOTOS[3]);
           }
           return 100;
         }

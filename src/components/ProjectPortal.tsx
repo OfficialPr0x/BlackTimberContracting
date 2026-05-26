@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, FileText, CheckCircle2, CloudRain, Sun, Calendar, DollarSign, User, Camera, ShieldCheck } from "lucide-react";
+import { Lock, CloudRain, Sun, User, Camera, ShieldCheck } from "lucide-react";
+import { PORTAL_PHOTOS } from "@/data/jobPhotos";
 
 interface ProjectSession {
   clientName: string;
@@ -43,12 +44,12 @@ const DEMO_SESSIONS: Record<string, ProjectSession> = {
       {
         date: "May 22, 2026",
         text: "Support posts anchored. Placed helical screw anchors at 6,000 lbs torque to bypass frost line.",
-        image: "/patio_fernie.png"
+        image: PORTAL_PHOTOS[0]
       },
       {
         date: "May 20, 2026",
         text: "Zoning review finalized with regional district. Site cleared and layout stakes set.",
-        image: "/before.png"
+        image: PORTAL_PHOTOS[1]
       }
     ],
     availableUpgrades: [
@@ -79,12 +80,12 @@ const DEMO_SESSIONS: Record<string, ProjectSession> = {
       {
         date: "May 23, 2026",
         text: "Plank laying started. Utilizing hidden fasteners for a clean, screw-free composite surface.",
-        image: "/deck_cranbrook.png"
+        image: PORTAL_PHOTOS[2]
       },
       {
         date: "May 18, 2026",
         text: "Double-flashing moisture barrier applied along the ledger board. Framing structure approved by inspector.",
-        image: "/hero_bg.png"
+        image: PORTAL_PHOTOS[3]
       }
     ],
     availableUpgrades: [

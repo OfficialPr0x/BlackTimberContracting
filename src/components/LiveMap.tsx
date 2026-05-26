@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { MapPin, X, Star, Calendar, DollarSign, Hammer } from "lucide-react";
+import { MapPin, Star, Calendar, DollarSign } from "lucide-react";
+import { MAP_PHOTOS } from "@/data/jobPhotos";
 
 interface ProjectPin {
   id: string;
@@ -27,7 +28,7 @@ const PROJECTS: ProjectPin[] = [
     material: "Western Red Cedar",
     review: "The heavy timber joinery is absolutely flawless. Jaryd and the crew worked through mountain snow delays and finished right on target.",
     client: "Marcus L.",
-    image: "/patio_fernie.png",
+    image: MAP_PHOTOS[0],
     x: 65,
     y: 75
   },
@@ -40,7 +41,7 @@ const PROJECTS: ProjectPin[] = [
     material: "TimberTech Composite",
     review: "I thought it would cost 40k. They found a structural framing workaround that saved me over 7k. Unbelievable efficiency and service.",
     client: "Sarah J.",
-    image: "/deck_cranbrook.png",
+    image: MAP_PHOTOS[1],
     x: 45,
     y: 70
   },
@@ -53,7 +54,7 @@ const PROJECTS: ProjectPin[] = [
     material: "Pressure Treated & Steel Rods",
     review: "Solid build. Solid team. They did helical screw anchors which means my sloped property is completely locked in.",
     client: "Robert K.",
-    image: "/after.png",
+    image: MAP_PHOTOS[2],
     x: 75,
     y: 50
   },
@@ -66,7 +67,7 @@ const PROJECTS: ProjectPin[] = [
     material: "Cedar & Glass Panels",
     review: "Exceptional timber work. Our backyard looks like a 5-star Kootenay ski chalet now. Recommend them to everyone.",
     client: "Douglas W.",
-    image: "/hero_bg.png",
+    image: MAP_PHOTOS[3],
     x: 78,
     y: 35
   },
@@ -79,7 +80,7 @@ const PROJECTS: ProjectPin[] = [
     material: "Clear Red Cedar Planks",
     review: "Amazing build quality. They managed all permit inspections and designed a layout that integrates perfectly with our pool.",
     client: "Linda H.",
-    image: "/deck_cranbrook.png",
+    image: MAP_PHOTOS[4],
     x: 20,
     y: 55
   }

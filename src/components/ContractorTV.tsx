@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Play, Tv, Clock, Eye, X, Volume2, VolumeX, SkipForward, Flame, ChevronRight } from "lucide-react";
+import { TV_PHOTOS } from "@/data/jobPhotos";
 
 interface Episode {
   id: string;
@@ -23,7 +24,7 @@ const EPISODES: Episode[] = [
     hook: "Fernie, BC. 20° slope. 12-foot drop. We anchored it with helical screws in -8°C.",
     duration: "14:22",
     views: "32.1k",
-    thumbnail: "/patio_fernie.png",
+    thumbnail: TV_PHOTOS[0],
     description:
       "Four-week build condensed into 14 minutes. Drone footage, framing detail, the moment a beam almost slipped off the lift, and how we engineered around bedrock.",
     featured: true,
@@ -35,7 +36,7 @@ const EPISODES: Episode[] = [
     hook: "Another contractor's ledger board was nailed — not bolted. Here's the fix.",
     duration: "8:03",
     views: "18.7k",
-    thumbnail: "/before.png",
+    thumbnail: TV_PHOTOS[1],
     description:
       "Jaryd walks through a jobsite audit where he found a previous contractor's incorrect ledger fastening and shows step-by-step how to correct it without tearing the whole structure down.",
   },
@@ -46,7 +47,7 @@ const EPISODES: Episode[] = [
     hook: "Sarah was quoted $58,400 by two other contractors. We delivered at $32,800.",
     duration: "6:18",
     views: "24.5k",
-    thumbnail: "/deck_cranbrook.png",
+    thumbnail: TV_PHOTOS[2],
     description:
       "How a re-engineered post layout, a smarter joist span, and ordering composite direct from the mill turned a 'no' into the deck of her dreams — without cutting a single corner.",
   },
@@ -57,7 +58,7 @@ const EPISODES: Episode[] = [
     hook: "−22°C. Wind chill -34°C. Pergola had to be up before clients flew home.",
     duration: "9:47",
     views: "41.2k",
-    thumbnail: "/hero_bg.png",
+    thumbnail: TV_PHOTOS[3],
     description:
       "We don't shut down for weather. Watch the team work through a Kootenay blizzard to hit a non-negotiable deadline. Heated tents, propane warmers, and 14-hour days.",
   },
@@ -68,7 +69,7 @@ const EPISODES: Episode[] = [
     hook: "If you're still using concrete pads, your deck has a frost-line clock on it.",
     duration: "5:31",
     views: "11.4k",
-    thumbnail: "/after.png",
+    thumbnail: TV_PHOTOS[4],
     description:
       "An in-depth breakdown of helical screw piling torque values, stability on sloped terrain, and why we guarantee them for life.",
   },
@@ -79,7 +80,7 @@ const EPISODES: Episode[] = [
     hook: "5:30am coffee to 7pm tools-down. No edits, no voiceover. Just the build.",
     duration: "22:14",
     views: "8.9k",
-    thumbnail: "/patio_fernie.png",
+    thumbnail: TV_PHOTOS[5],
     description:
       "Strapped a GoPro to Jaryd for an entire workday on a Cranbrook composite deck job. The good, the muddy, the radio chatter.",
   },

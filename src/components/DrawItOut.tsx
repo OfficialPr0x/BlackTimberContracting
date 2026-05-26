@@ -239,12 +239,14 @@ export default function DrawItOut() {
 
         {/* Templates Picker */}
         <div className="flex flex-wrap items-center gap-1.5 bg-brand-black p-1 border border-brand-border rounded-lg">
-          {[
-            { id: "deck", label: "Deck" },
-            { id: "fence", label: "Fence" },
-            { id: "garage", label: "Garage/Shed" },
-            { id: "pergola", label: "Pergola" }
-          ].map(t => (
+          {(
+            [
+              { id: "deck", label: "Deck" },
+              { id: "fence", label: "Fence" },
+              { id: "garage", label: "Garage/Shed" },
+              { id: "pergola", label: "Pergola" },
+            ] as const satisfies ReadonlyArray<{ id: Template; label: string }>
+          ).map((t) => (
             <button
               key={t.id}
               onClick={() => drawTemplate(t.id)}

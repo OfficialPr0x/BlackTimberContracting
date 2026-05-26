@@ -28,7 +28,13 @@ export interface LeadLog {
   errors?: string[];
 }
 
-function emit(level: "info" | "warn" | "error", kind: string, payload: Record<string, unknown>) {
+// Generic over the payload so TS lets us pass typed interfaces (AiCallLog,
+// LeadLog) without forcing every consumer to add a string index signature.
+function emit<T extends object>(
+  level: "info" | "warn" | "error",
+  kind: string,
+  payload: T,
+) {
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     level,

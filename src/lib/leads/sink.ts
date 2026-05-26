@@ -65,7 +65,10 @@ export async function deliverLead(lead: LeadInput): Promise<DeliveryResult> {
 // File sink: append JSONL — easy to grep, import, or pipe later
 // -----------------------------------------------------------------------------
 async function appendToFile(lead: LeadInput): Promise<void> {
-  const abs = path.resolve(process.cwd(), FILE_PATH);
+  // turbopackIgnore tells Next's NFT tracer not to follow this dynamic path —
+  // otherwise it conservatively traces the whole project (including
+  // next.config.ts) into the route's serverless bundle.
+  const abs = path.resolve(/* turbopackIgnore: true */ process.cwd(), FILE_PATH);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   const line = JSON.stringify({ at: new Date().toISOString(), ...lead }) + "\n";
   await fs.appendFile(abs, line, "utf8");

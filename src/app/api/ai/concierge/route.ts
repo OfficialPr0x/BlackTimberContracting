@@ -16,6 +16,9 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
+// Critical for streaming: force a fully dynamic, never-cached response.
+// Without this, Next can buffer the response body during prerender attempts.
+export const dynamic = "force-dynamic";
 
 const ConciergeInput = z.object({
   messages: z
@@ -56,6 +59,12 @@ export async function POST(req: Request) {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Content-Type-Options": "nosniff",
+        // Tells Vercel / nginx / Cloudflare NOT to buffer this body. Without
+        // this, intermediaries will collect the whole stream and flush it as
+        // a single chunk, killing the streaming UX.
+        "X-Accel-Buffering": "no",
+        // Hint to the browser that this is a long-lived chunked body.
+        "Transfer-Encoding": "chunked",
       },
     });
   } catch (err) {

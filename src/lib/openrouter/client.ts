@@ -434,53 +434,66 @@ async function safeReadText(res: Response): Promise<string> {
 
 /**
  * Convert OpenRouter SSE chunks into a plain UTF-8 text stream.
- * Each `data: {...}` line is parsed; we emit only the delta content.
+ *
+ * We use `start()` (eager push) instead of `pull()` (lazy backpressure) so
+ * tokens are forwarded the instant they arrive — `pull()` waits for the
+ * consumer to ask for the next chunk, which compounds latency on every
+ * token, making short replies feel "stuck" before they catch up.
+ *
+ * The first chunk we send is a single space — a "stream primer" that flushes
+ * the response through any intermediate proxy buffer in Next dev / Vercel /
+ * nginx so the browser starts reading immediately. We trim it on the client.
  */
 function parseSSEToTextStream(input: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
-  const reader = input.getReader();
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
-  let buf = "";
 
   return new ReadableStream({
-    async pull(controller) {
+    async start(controller) {
+      // Prime the connection so proxies flush the headers immediately.
+      controller.enqueue(encoder.encode(" "));
+
+      const reader = input.getReader();
+      let buf = "";
       try {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-          return;
-        }
-        buf += decoder.decode(value, { stream: true });
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          buf += decoder.decode(value, { stream: true });
 
-        // Split on SSE record boundary (blank line)
-        const records = buf.split("\n\n");
-        buf = records.pop() ?? "";
+          // Split on SSE record boundary (blank line).
+          const records = buf.split("\n\n");
+          buf = records.pop() ?? "";
 
-        for (const record of records) {
-          for (const line of record.split("\n")) {
-            if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            if (payload === "[DONE]") {
-              controller.close();
-              return;
-            }
-            try {
-              const json = JSON.parse(payload) as {
-                choices?: { delta?: { content?: string } }[];
-              };
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) controller.enqueue(encoder.encode(delta));
-            } catch {
-              // ignore — partial / keep-alive frames
+          for (const record of records) {
+            for (const line of record.split("\n")) {
+              if (!line.startsWith("data:")) continue;
+              const payload = line.slice(5).trim();
+              if (payload === "" || payload === "[DONE]") {
+                if (payload === "[DONE]") {
+                  controller.close();
+                  return;
+                }
+                continue;
+              }
+              try {
+                const json = JSON.parse(payload) as {
+                  choices?: { delta?: { content?: string } }[];
+                };
+                const delta = json.choices?.[0]?.delta?.content;
+                if (delta) controller.enqueue(encoder.encode(delta));
+              } catch {
+                // ignore — partial / keep-alive frames
+              }
             }
           }
         }
       } catch (err) {
         controller.error(err);
       }
-    },
-    cancel() {
-      reader.cancel().catch(() => {});
     },
   });
 }

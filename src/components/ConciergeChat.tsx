@@ -11,6 +11,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { X, Send, Loader, Phone } from "lucide-react";
+import Markdown from "@/components/Markdown";
 
 const LOGO_SRC = "/black-timber-logo.png";
 
@@ -225,22 +226,26 @@ export default function ConciergeChat() {
                     </span>
                   )}
                   <div
-                    className={`max-w-[85%] px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap ${
+                    className={`max-w-[85%] px-3 py-2 text-xs leading-relaxed ${
                       m.role === "user"
-                        ? "bg-brand-gold text-brand-black rounded-2xl rounded-tr-sm font-medium"
+                        ? "bg-brand-gold text-brand-black rounded-2xl rounded-tr-sm font-medium whitespace-pre-wrap"
                         : "bg-brand-panel border border-brand-border text-brand-gray rounded-2xl rounded-tl-sm"
                     }`}
                   >
                     {m.content ? (
-                      <>
-                        {m.content}
-                        {isLastAssistant && (
-                          <span
-                            aria-hidden
-                            className="inline-block w-[6px] h-[12px] -mb-[1px] ml-0.5 bg-brand-gold animate-pulse align-middle"
-                          />
-                        )}
-                      </>
+                      m.role === "user" ? (
+                        m.content
+                      ) : (
+                        <div className="relative">
+                          <Markdown>{m.content}</Markdown>
+                          {isLastAssistant && (
+                            <span
+                              aria-hidden
+                              className="inline-block w-[6px] h-[12px] -mb-[1px] ml-0.5 bg-brand-gold animate-pulse align-middle"
+                            />
+                          )}
+                        </div>
+                      )
                     ) : (
                       <span className="inline-flex items-center gap-1.5 text-brand-gray">
                         <span className="flex gap-1">

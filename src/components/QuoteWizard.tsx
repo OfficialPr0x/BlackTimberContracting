@@ -814,7 +814,7 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                       <strong className="text-brand-gold">{bookingDate} at {bookingTime}</strong> has been sent to Jaryd.
                     </p>
                     <p className="text-xs text-brand-gray max-w-md mx-auto">
-                      You'll get a confirmation by email or phone within one business day. For anything urgent, call <a className="text-brand-gold underline" href="tel:2509198476">250-919-8476</a>.
+                      You'll get a confirmation by email or phone within one business day. For anything urgent, call <a className="text-brand-gold underline" href="tel:2509109071">250-910-9071</a>.
                     </p>
                   </div>
 

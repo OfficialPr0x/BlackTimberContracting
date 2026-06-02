@@ -299,10 +299,10 @@ export default function ConciergeChat() {
             <div className="flex justify-between items-center text-[9px] uppercase tracking-widest">
               <span className="text-brand-gray">AI · may make mistakes</span>
               <a
-                href="tel:2509198476"
+                href="tel:2509109071"
                 className="text-brand-gold hover:underline flex items-center gap-1"
               >
-                <Phone className="w-2.5 h-2.5" /> 250-919-8476
+                <Phone className="w-2.5 h-2.5" /> 250-910-9071
               </a>
             </div>
           </div>

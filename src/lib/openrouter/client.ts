@@ -91,7 +91,7 @@ function getApiKey(): string {
       code: "missing_api_key",
       status: 503,
       clientMessage:
-        "The Black Timber AI tools are not configured yet. Please call 250-919-8476 to reach Jaryd directly.",
+        "The Black Timber AI tools are not configured yet. Please call 250-910-9071 to reach Jaryd directly.",
       message: "OPENROUTER_API_KEY is not set",
     });
   }
@@ -164,7 +164,7 @@ async function callOnce(
       throw new AiError({
         code: "upstream_timeout",
         status: 504,
-        clientMessage: "The AI took too long to respond. Please try again — or call 250-919-8476.",
+        clientMessage: "The AI took too long to respond. Please try again — or call 250-910-9071.",
         message: `OpenRouter timeout after ${timeoutMs}ms on model ${model}`,
       });
     }
@@ -317,7 +317,7 @@ export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
   throw new AiError({
     code: "upstream_failed",
     status: 502,
-    clientMessage: "Our AI is having a moment. Please try again — or call 250-919-8476.",
+    clientMessage: "Our AI is having a moment. Please try again — or call 250-910-9071.",
     message: `All models in chain failed for task=${opts.task}`,
     cause: lastError,
   });

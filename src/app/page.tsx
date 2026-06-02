@@ -104,9 +104,9 @@ export default function Home() {
           </nav>
 
           <div className="hidden lg:flex items-center space-x-4">
-            <a href="tel:250-919-8476" className="text-xs font-mono font-bold text-brand-gray hover:text-white flex items-center gap-1.5 transition-colors">
+            <a href="tel:250-910-9071" className="text-xs font-mono font-bold text-brand-gray hover:text-white flex items-center gap-1.5 transition-colors">
               <Phone className="w-3.5 h-3.5 text-brand-gold" />
-              250-919-8476
+              250-910-9071
             </a>
             <button
               onClick={() => triggerQuote(1)}
@@ -136,9 +136,9 @@ export default function Home() {
             </div>
             <div className="h-[1px] bg-brand-border" />
             <div className="flex flex-col gap-3">
-              <a href="tel:250-919-8476" className="text-xs font-mono font-bold text-white flex items-center justify-center gap-1.5 py-2 border border-brand-border rounded">
+              <a href="tel:250-910-9071" className="text-xs font-mono font-bold text-white flex items-center justify-center gap-1.5 py-2 border border-brand-border rounded">
                 <Phone className="w-4 h-4 text-brand-gold" />
-                250-919-8476
+                250-910-9071
               </a>
               <button
                 onClick={() => { triggerQuote(1); setMobileMenuOpen(false); }}
@@ -241,11 +241,11 @@ export default function Home() {
               </button>
 
               <a
-                href="tel:250-919-8476"
+                href="tel:250-910-9071"
                 className="px-9 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/20 hover:border-brand-gold/40 rounded-xl font-bold uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-2 backdrop-blur-md"
               >
                 <Phone className="w-4 h-4 text-brand-gold" />
-                Call 250-919-8476
+                Call 250-910-9071
               </a>
             </div>
           </div>
@@ -405,13 +405,13 @@ export default function Home() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left max-w-3xl mx-auto">
             <a
-              href="tel:250-919-8476"
+              href="tel:250-910-9071"
               className="p-5 rounded-2xl bg-brand-charcoal border border-brand-border hover:border-brand-gold/40 transition-all flex items-start space-x-3 text-xs glass-panel-hover"
             >
               <Phone className="w-5 h-5 text-brand-gold flex-shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold text-white uppercase block">Call or Text</span>
-                <span className="font-mono text-brand-gold block mt-0.5 font-bold">250-919-8476</span>
+                <span className="font-mono text-brand-gold block mt-0.5 font-bold">250-910-9071</span>
                 <span className="text-[9px] text-brand-gray block mt-1">Mon–Sat: 7AM – 7PM</span>
               </div>
             </a>

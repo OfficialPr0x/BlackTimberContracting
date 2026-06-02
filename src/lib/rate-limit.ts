@@ -75,7 +75,7 @@ export function checkRate(req: Request, limit: LimitName): void {
     throw new AiError({
       code: "rate_limited",
       status: 429,
-      clientMessage: `Slow down — try again in ${retryAfterSec}s. (If you need help right now, call 250-919-8476.)`,
+      clientMessage: `Slow down — try again in ${retryAfterSec}s. (If you need help right now, call 250-910-9071.)`,
       message: `rate limit ${limit} hit by ${ip} (${b.times.length + 1} > ${max})`,
     });
   }

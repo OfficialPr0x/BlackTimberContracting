@@ -131,10 +131,10 @@ export default function MeetJaryd({ onTriggerQuote }: MeetJarydProps) {
                 Talk to Jaryd Directly
               </button>
               <a
-                href="tel:250-919-8476"
+                href="tel:250-910-9071"
                 className="px-6 py-3.5 border border-brand-border hover:border-brand-gold/40 text-white font-bold uppercase tracking-widest text-xs rounded-xl transition-all text-center"
               >
-                Text 250-919-8476
+                Text 250-910-9071
               </a>
             </div>
 

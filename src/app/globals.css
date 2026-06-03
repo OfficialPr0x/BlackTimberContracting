@@ -254,3 +254,26 @@ h1, h2, h3, h4, h5, h6 {
   background: linear-gradient(180deg, var(--color-brand-charcoal) 0%, var(--color-brand-black) 100%);
   clip-path: polygon(0 0, 100% 18%, 100% 100%, 0 82%);
 }
+
+/* ────────────────────────── Print: /admin/quotes/[id] ────────────────────────
+ * Tailwind's `print:` utilities handle most of it on the page itself.
+ * What we add here:
+ *   - 0.6in margins on letter paper (defaults are wider).
+ *   - Force the document body to white-on-black-text just on print, even if
+ *     the dark theme has bled into anything we forgot to override inline.
+ *   - Hide the global concierge chat reliably (the chat is usePathname-gated
+ *     to skip /admin already, but we belt-and-suspenders it for print runs
+ *     opened directly from a deep link).
+ *   - Avoid breaking line-item rows mid-cell when paginating.
+ * ──────────────────────────────────────────────────────────────────────────── */
+@media print {
+  @page { margin: 0.6in; }
+  html, body { background: #fff !important; color: #000 !important; }
+  /* Hide any fixed-position overlays that aren't part of the quote body. */
+  .mouse-spotlight,
+  .film-grain { display: none !important; }
+  /* Don't split a single line-item row across pages. */
+  table tr { page-break-inside: avoid; break-inside: avoid; }
+  /* Make sure links don't pick up any blue-on-print user-agent default. */
+  a { color: inherit !important; text-decoration: none !important; }
+}

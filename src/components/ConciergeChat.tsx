@@ -1,15 +1,19 @@
 "use client";
 
 /**
- * Floating "Black Timber Concierge" chat — bottom-right of every page.
+ * Floating "Black Timber Concierge" chat — bottom-right of every PUBLIC page.
  *
  * Streams responses from /api/ai/concierge. Conversation lives in component
  * state (no persistence) so refreshing clears the chat. If we want history
  * later, swap to localStorage or a server-side session store.
+ *
+ * Hidden on /admin/* — the concierge is for site visitors, not for the
+ * internal quote builder.
  */
 
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { X, Send, Loader, Phone } from "lucide-react";
 import Markdown from "@/components/Markdown";
 
@@ -26,6 +30,7 @@ const OPENING = [
 ];
 
 export default function ConciergeChat() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -46,6 +51,10 @@ export default function ConciergeChat() {
   useEffect(() => {
     if (open && inputRef.current) inputRef.current.focus();
   }, [open]);
+
+  // Hide the public concierge on the internal admin tool. Placed AFTER all
+  // hook calls so the rules of hooks aren't violated by the early return.
+  if (pathname?.startsWith("/admin")) return null;
 
   const send = async () => {
     const text = input.trim();

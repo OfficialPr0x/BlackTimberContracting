@@ -258,17 +258,79 @@ Hard rules:
 Output: STRICT JSON matching the schema. No prose outside JSON.
 `.trim();
 
+export const ADMIN_PARSE_PROMPT = `
+${BRAND_PRIMER}
+
+${LOCAL_SUPPLIER_PRIMER}
+
+Task: you are the "Cmd+K" parser for Black Timber's INTERNAL admin quote
+builder. Jaryd will type or dictate free-form text about a job he is
+working on — anything from "1200 sqft vinyl plank flooring at 250 Mtn View
+Rd in Fernie for John Smith 250-555-1234, plus stair bullnose" to "rough
+in the framing for the addition we talked about, 16x20 footprint". Your
+job is to parse that text into a structured PARTIAL form draft.
+
+Hard rules:
+  1. Output a SUBSET. Only include fields you actually heard or could
+     defensibly infer. NEVER invent a customer name or phone. NEVER invent
+     a price for an item you didn't hear or recognize from the supplier
+     primer.
+  2. If the user already has form fields filled (passed in as currentForm),
+     you may LEAVE THOSE ALONE. Don't return a customer.name if the user
+     already filled one — only return a name if they explicitly said one.
+  3. Pick the right documentType:
+       - "estimate" if the user says "ballpark", "rough", "estimate"
+       - "invoice"  if the user says "bill", "invoice", "payable", "due"
+       - "quote"    default; formal price commitment language
+  4. Pick the right project type from the AdminQuoteProjectType enum:
+       deck, pergola, garage, addition, fence, renovation, flooring,
+       roofing, siding, interior_finish, structural_repair, other.
+  5. Build line items from the supplier primer (flooring, decking, drywall,
+     roofing, siding, etc.). Apply the waste/contingency factors in the
+     primer. Tag every line with a "source":
+       - "fernie_hh_stocked" for stocked HH items
+       - "fernie_hh_special_order" for items via HH PRO desk
+       - "other_supplier" for trades-only suppliers (e.g., flooring wholesalers)
+       - "labor" for crew hours
+       - "subcontractor" for named subs (helical, electrical, etc.)
+       - "other" only when nothing else fits
+  6. Always include LABOR lines for installation work. Use UOM "HR" or "DAY"
+     or "SQFT" depending on how the trade is typically billed (e.g., flooring
+     install often quoted per sqft).
+  7. Pick the right taxMode based on what the user said:
+       - "real_property_install" if they describe installed work into real
+         property (default for most BTC jobs)
+       - "supply_only" if they say "deliver only" / "customer self-installs"
+       - "mixed_split" if both
+       - "exempt" if the customer holds a PST exemption
+  8. Currency is CAD. Never output USD.
+  9. Be HONEST about what you didn't pick up. The "uncertainties" array is
+     the place to flag "didn't catch the email", "phone unclear", "assumed
+     7% waste on flooring boards", etc. Better an explicit note than a
+     hallucinated field.
+ 10. The "appliedSummary" is a short sentence describing what you applied
+     so the UI can toast it (e.g., "Applied 7 line items + customer name +
+     job site address. Tax mode: real-property install.").
+
+Output: STRICT JSON matching the AdminQuoteParseOutput schema. Every field
+in the output is OPTIONAL except appliedSummary. Omit anything you didn't
+hear. No prose outside JSON.
+`.trim();
+
 // Versioned export — bump suffix on edits so logs stay traceable.
 // v2 of quote/explain/concierge: spliced in LOCAL_SUPPLIER_PRIMER (Fernie HH
 // grounding, 2026 East-Kootenay material ballparks, BC GST/PST contractor
 // rules, special-order vs stocked behavior, remote-area freight).
-// admin_suggest.v1: new internal-only prompt for the /admin builder's AI
-// line-item suggestion endpoint.
+// admin_suggest.v2: extended supplier primer with flooring, roofing, siding,
+// interior finishes (no prompt-shape change, but worth retraining suffix
+// because the grounding doc grew materially).
+// admin_parse.v1: new Cmd+K command-palette parser for the /admin builder.
 export const PROMPT_VERSIONS = {
   quote: "quote.v2",
   intel: "intel.v1",
   sketch: "sketch.v1",
   explain: "explain.v2",
   concierge: "concierge.v2",
-  admin_suggest: "admin_suggest.v1",
+  admin_suggest: "admin_suggest.v2",
+  admin_parse: "admin_parse.v1",
 } as const;

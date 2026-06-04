@@ -22,6 +22,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import type {
+  AdminDocumentType,
   AdminQuoteInput,
   AdminQuoteSaved,
   AdminQuoteTaxMode,
@@ -102,11 +103,17 @@ function round2(n: number): number {
 // -----------------------------------------------------------------------------
 
 /**
- * Generate a quote id like `Q-20260602-AB3C`. Date prefix sorts naturally,
- * the 4-char suffix is ~1.6M unique values per day — way more than a one-
- * person business will ever use.
+ * Generate a document id like `Q-20260602-AB3C` (quote), `E-...` (estimate),
+ * or `I-...` (invoice). Date prefix sorts naturally; the 4-char suffix is
+ * ~1.6M unique values per day — way more than a one-person business will
+ * ever use. Different prefixes per document type let humans tell at a
+ * glance whether a doc is a price commitment or a bill.
  */
-export function generateQuoteId(now = new Date()): string {
+export function generateQuoteId(
+  docType: AdminDocumentType = "quote",
+  now = new Date()
+): string {
+  const prefix = docType === "invoice" ? "I" : docType === "estimate" ? "E" : "Q";
   const yyyy = now.getUTCFullYear();
   const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(now.getUTCDate()).padStart(2, "0");
@@ -117,7 +124,7 @@ export function generateQuoteId(now = new Date()): string {
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 4)
     .padEnd(4, "X");
-  return `Q-${yyyy}${mm}${dd}-${suffix}`;
+  return `${prefix}-${yyyy}${mm}${dd}-${suffix}`;
 }
 
 function defaultValidUntil(now = new Date(), days = 7): string {
@@ -152,11 +159,14 @@ export async function saveQuote(
   createdBy: string
 ): Promise<AdminQuoteSaved> {
   const now = new Date();
-  const id = input.id ?? generateQuoteId(now);
-  const validUntil = input.validUntil ?? defaultValidUntil(now);
+  const id = input.id ?? generateQuoteId(input.documentType, now);
+  // Invoices: validUntil is interpreted as the payment-due date. Default 14d.
+  // Quotes / estimates: 7-day price hold by default.
+  const validUntil =
+    input.validUntil ?? defaultValidUntil(now, input.documentType === "invoice" ? 14 : 7);
 
   // Normalize line ids — the client may have used "row-1" etc; we keep them
-  // for round-trip stability but guarantee uniqueness per quote.
+  // for round-trip stability but guarantee uniqueness per document.
   const seen = new Set<string>();
   const lines = input.lines.map((l, i) => {
     let lineId = l.id;
@@ -173,6 +183,7 @@ export async function saveQuote(
 
   const record: AdminQuoteSaved = {
     id,
+    documentType: input.documentType,
     customer: input.customer,
     project: input.project,
     lines,
@@ -181,6 +192,8 @@ export async function saveQuote(
     validUntil,
     status: input.status,
     internalNotes: input.internalNotes,
+    paymentTerms: input.paymentTerms,
+    paymentInstructions: input.paymentInstructions,
     totals,
     createdAt,
     updatedAt: now.toISOString(),

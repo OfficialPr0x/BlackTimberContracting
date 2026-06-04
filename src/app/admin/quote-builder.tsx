@@ -34,14 +34,21 @@ import {
   ExternalLink,
   Loader,
   AlertCircle,
+  FileText,
+  Calculator,
+  Receipt,
 } from "lucide-react";
 import type {
+  AdminDocumentType,
   AdminQuoteCustomer,
+  AdminQuoteParseOutput,
   AdminQuoteProject,
+  AdminQuoteProjectType,
   AdminQuoteTaxMode,
   QuoteLineSource,
   QuoteLineUom,
 } from "@/lib/admin/schemas";
+import CmdK from "./cmd-k";
 
 interface RecentQuoteSummary {
   id: string;
@@ -75,6 +82,50 @@ const SOURCE_OPTIONS: { value: QuoteLineSource; label: string }[] = [
   { value: "labor", label: "Labor" },
   { value: "subcontractor", label: "Subcontractor" },
   { value: "other", label: "Other" },
+];
+
+// Project category options. Keep in sync with AdminQuoteProjectType in schemas.ts.
+const PROJECT_TYPE_OPTIONS: { value: AdminQuoteProjectType; label: string }[] = [
+  { value: "deck", label: "Deck" },
+  { value: "pergola", label: "Pergola" },
+  { value: "garage", label: "Garage" },
+  { value: "addition", label: "Addition" },
+  { value: "fence", label: "Fence" },
+  { value: "renovation", label: "Renovation" },
+  { value: "flooring", label: "Flooring" },
+  { value: "roofing", label: "Roofing" },
+  { value: "siding", label: "Siding" },
+  { value: "interior_finish", label: "Interior finish" },
+  { value: "structural_repair", label: "Structural repair" },
+  { value: "other", label: "Other" },
+];
+
+// Document type metadata — drives the top-of-form tab bar, button labels,
+// and copy in the totals panel.
+const DOCUMENT_TYPE_OPTIONS: {
+  value: AdminDocumentType;
+  label: string;
+  description: string;
+  Icon: typeof FileText;
+}[] = [
+  {
+    value: "quote",
+    label: "Quote",
+    description: "Formal price commitment, valid until a date.",
+    Icon: FileText,
+  },
+  {
+    value: "estimate",
+    label: "Estimate",
+    description: "Ballpark for the customer; may move with site conditions.",
+    Icon: Calculator,
+  },
+  {
+    value: "invoice",
+    label: "Invoice",
+    description: "Bill for completed or in-progress work, with payment terms.",
+    Icon: Receipt,
+  },
 ];
 
 const TAX_MODE_OPTIONS: {
@@ -133,9 +184,10 @@ function fmtCAD(n: number): string {
   }).format(n);
 }
 
-function defaultValidUntil(): string {
+function defaultValidUntil(documentType: AdminDocumentType = "quote"): string {
   const d = new Date();
-  d.setDate(d.getDate() + 7);
+  // Invoices: payment-due date defaults to +14 days (Net 14). Quotes: 7-day hold.
+  d.setDate(d.getDate() + (documentType === "invoice" ? 14 : 7));
   return d.toISOString().slice(0, 10);
 }
 
@@ -163,8 +215,13 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [taxMode, setTaxMode] = useState<AdminQuoteTaxMode>("real_property_install");
   const [freightCAD, setFreightCAD] = useState<number>(0);
-  const [validUntil, setValidUntil] = useState<string>(defaultValidUntil());
+  const [documentType, setDocumentType] = useState<AdminDocumentType>("quote");
+  const [validUntil, setValidUntil] = useState<string>(defaultValidUntil("quote"));
   const [internalNotes, setInternalNotes] = useState<string>("");
+  // Invoice-only fields. Stored even when not in invoice mode so users can
+  // pre-fill them and switch to invoice without losing data.
+  const [paymentTerms, setPaymentTerms] = useState<string>("Net 14");
+  const [paymentInstructions, setPaymentInstructions] = useState<string>("");
 
   // ---- UI state ------------------------------------------------------------
   const [suggesting, setSuggesting] = useState(false);
@@ -256,7 +313,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
     async (status: "draft" | "sent") => {
       if (saving) return;
       if (!customer.name.trim()) {
-        setError("Customer name is required to save a quote.");
+        setError("Customer name is required.");
         return;
       }
       if (!project.scopeSummary.trim()) {
@@ -275,6 +332,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: savedQuoteId ?? undefined,
+            documentType,
             customer: {
               ...customer,
               email: customer.email?.trim() || undefined,
@@ -282,13 +340,27 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
               billingAddress: customer.billingAddress?.trim() || undefined,
               jobSiteAddress: customer.jobSiteAddress?.trim() || undefined,
             },
-            project,
+            project: {
+              ...project,
+              material: project.material?.trim() || undefined,
+              notes: project.notes?.trim() || undefined,
+            },
             lines,
             taxMode,
             freightCAD,
             validUntil,
             status,
             internalNotes: internalNotes.trim() || undefined,
+            // Only send invoice-specific fields when the doc is an invoice;
+            // otherwise the schema's optional fields stay omitted.
+            paymentTerms:
+              documentType === "invoice" && paymentTerms.trim()
+                ? paymentTerms.trim()
+                : undefined,
+            paymentInstructions:
+              documentType === "invoice" && paymentInstructions.trim()
+                ? paymentInstructions.trim()
+                : undefined,
           }),
         });
         const body = await res.json();
@@ -296,7 +368,6 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
           throw new Error(body?.error?.message ?? `Save failed (${res.status})`);
         }
         setSavedQuoteId(body.id);
-        // Optimistically prepend / update in the recents list.
         setRecentQuotes((prev) => {
           const filtered = prev.filter((q) => q.id !== body.id);
           return [
@@ -312,16 +383,19 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
         });
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save quote.");
+        setError(err instanceof Error ? err.message : "Failed to save.");
       } finally {
         setSaving(false);
       }
     },
     [
       customer,
+      documentType,
       freightCAD,
       internalNotes,
       lines,
+      paymentInstructions,
+      paymentTerms,
       project,
       router,
       saving,
@@ -331,10 +405,154 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
     ]
   );
 
+  // ---- Cmd+K apply --------------------------------------------------------
+  // Merges the AI's partial parse into our state. Rules:
+  //   - Strings: only overwrite if currently empty (so we don't clobber the
+  //     user's typing). Exception: docType, taxMode, freight always update if
+  //     the AI explicitly returned them — those are the user's most likely
+  //     "switch the form" intent.
+  //   - Lines: append to the existing list (de-empties the placeholder row).
+  const handleParseApply = useCallback((parsed: AdminQuoteParseOutput) => {
+    if (parsed.documentType) {
+      setDocumentType(parsed.documentType);
+      setValidUntil((cur) =>
+        // Reset the date if the doc type just changed and the user hadn't
+        // touched it (heuristic: the date still equals one of the defaults).
+        cur === defaultValidUntil("quote") || cur === defaultValidUntil("invoice")
+          ? defaultValidUntil(parsed.documentType)
+          : cur
+      );
+    }
+    if (parsed.customer) {
+      setCustomer((c) => ({
+        name: c.name?.trim() ? c.name : parsed.customer?.name ?? c.name,
+        email: c.email?.trim() ? c.email : parsed.customer?.email ?? c.email,
+        phone: c.phone?.trim() ? c.phone : parsed.customer?.phone ?? c.phone,
+        billingAddress: c.billingAddress?.trim()
+          ? c.billingAddress
+          : parsed.customer?.billingAddress ?? c.billingAddress,
+        jobSiteAddress: c.jobSiteAddress?.trim()
+          ? c.jobSiteAddress
+          : parsed.customer?.jobSiteAddress ?? c.jobSiteAddress,
+      }));
+    }
+    if (parsed.project) {
+      setProject((p) => ({
+        type: parsed.project?.type ?? p.type,
+        scopeSummary: p.scopeSummary?.trim()
+          ? p.scopeSummary
+          : parsed.project?.scopeSummary ?? p.scopeSummary,
+        lengthFt: p.lengthFt ?? parsed.project?.lengthFt,
+        widthFt: p.widthFt ?? parsed.project?.widthFt,
+        material: p.material?.trim() ? p.material : parsed.project?.material ?? p.material,
+        notes: p.notes?.trim() ? p.notes : parsed.project?.notes ?? p.notes,
+      }));
+    }
+    if (parsed.taxMode) setTaxMode(parsed.taxMode);
+    if (typeof parsed.freightCAD === "number") setFreightCAD(parsed.freightCAD);
+    if (parsed.lines && parsed.lines.length > 0) {
+      const newLines: LineDraft[] = parsed.lines.map((l) => ({
+        id: makeLineId(),
+        description: l.description,
+        quantity: l.quantity,
+        uom: l.uom,
+        unitPriceCAD: l.unitPriceCAD,
+        source: l.source,
+        leadTimeDays: l.leadTimeDays,
+        notes: l.notes,
+      }));
+      setLines((prev) => {
+        const onlyEmpty =
+          prev.length === 1 &&
+          prev[0].description.trim() === "" &&
+          prev[0].unitPriceCAD === 0;
+        return onlyEmpty ? newLines : [...prev, ...newLines];
+      });
+    }
+  }, []);
+
+  // Snapshot for the parser so it knows what fields are already filled.
+  const parseFormSnapshot = useMemo(
+    () => ({
+      customer: {
+        name: customer.name || undefined,
+        email: customer.email || undefined,
+        phone: customer.phone || undefined,
+        billingAddress: customer.billingAddress || undefined,
+        jobSiteAddress: customer.jobSiteAddress || undefined,
+      },
+      project: {
+        type: project.type,
+        scopeSummary: project.scopeSummary || undefined,
+        material: project.material || undefined,
+      },
+      taxMode,
+      documentType,
+      lineCount: lines.filter((l) => l.description.trim().length > 0).length,
+    }),
+    [customer, project, taxMode, documentType, lines]
+  );
+
+  // The active document type's metadata, used in JSX below to label things
+  // like the action button and the "valid until" / "due date" field.
+  const docTypeMeta = DOCUMENT_TYPE_OPTIONS.find((d) => d.value === documentType)!;
+  const dateLabel =
+    documentType === "invoice"
+      ? "Payment due"
+      : documentType === "estimate"
+      ? "Estimate good until"
+      : "Valid until";
+  const sentLabel =
+    documentType === "invoice"
+      ? "Save & mark issued"
+      : documentType === "estimate"
+      ? "Save & mark sent"
+      : "Save & mark sent";
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       {/* ====================================================== Form ===== */}
       <div className="space-y-6">
+        {/* ---- Document type tab bar ---- */}
+        <div className="flex flex-wrap items-stretch gap-2 p-1.5 rounded-xl border border-brand-border bg-brand-charcoal/40">
+          {DOCUMENT_TYPE_OPTIONS.map((opt) => {
+            const active = documentType === opt.value;
+            const Icon = opt.Icon;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  setDocumentType(opt.value);
+                  // If the validity date is still a default, snap it to the
+                  // new doc type's default. Don't blow away custom dates.
+                  setValidUntil((cur) =>
+                    cur === defaultValidUntil("quote") || cur === defaultValidUntil("invoice")
+                      ? defaultValidUntil(opt.value)
+                      : cur
+                  );
+                }}
+                aria-pressed={active}
+                className={`flex-1 min-w-[140px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-left transition-colors border ${
+                  active
+                    ? "bg-brand-gold/15 border-brand-gold text-brand-gold"
+                    : "bg-transparent border-transparent text-brand-gray hover:text-white hover:bg-brand-black/30"
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="flex flex-col">
+                  <span className="text-xs font-mono uppercase tracking-widest font-bold">
+                    {opt.label}
+                  </span>
+                  <span className="text-[10px] text-brand-gray leading-tight mt-0.5">
+                    {opt.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* ---- Customer ---- */}
         <Section title="Customer">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -398,13 +616,11 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
                 }
                 className={inputCls}
               >
-                <option value="deck">Deck</option>
-                <option value="pergola">Pergola</option>
-                <option value="garage">Garage</option>
-                <option value="addition">Addition</option>
-                <option value="fence">Fence</option>
-                <option value="renovation">Renovation</option>
-                <option value="other">Other</option>
+                {PROJECT_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="Length (ft)">
@@ -438,23 +654,30 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
               />
             </Field>
             <Field label="Material">
-              <select
+              {/* Free text — flooring, roofing, siding all want their own */}
+              {/* vocab. The supplier primer already grounds the AI. */}
+              <input
+                type="text"
                 value={project.material ?? ""}
                 onChange={(e) =>
                   setProject({
                     ...project,
-                    material: (e.target.value || undefined) as AdminQuoteProject["material"],
+                    material: e.target.value || undefined,
                   })
                 }
+                placeholder={
+                  project.type === "flooring"
+                    ? "LVP, hardwood, tile…"
+                    : project.type === "roofing"
+                    ? "asphalt, metal, synthetic…"
+                    : project.type === "siding"
+                    ? "Hardie, vinyl, cedar…"
+                    : project.type === "interior_finish"
+                    ? "drywall, paint, trim…"
+                    : "PT, cedar, composite, mixed…"
+                }
                 className={inputCls}
-              >
-                <option value="">—</option>
-                <option value="treated">Pressure-treated</option>
-                <option value="cedar">Cedar</option>
-                <option value="composite">Composite</option>
-                <option value="mixed">Mixed</option>
-                <option value="other">Other</option>
-              </select>
+              />
             </Field>
           </div>
           <Field label="Scope summary" required>
@@ -657,7 +880,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
                 className={`${inputCls} font-mono`}
               />
             </Field>
-            <Field label="Valid until">
+            <Field label={dateLabel}>
               <input
                 type="date"
                 value={validUntil}
@@ -670,12 +893,40 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
                 type="text"
                 value={internalNotes}
                 onChange={(e) => setInternalNotes(e.target.value)}
-                placeholder="Not shown on the quote"
+                placeholder={`Not shown on the ${docTypeMeta.label.toLowerCase()}`}
                 className={inputCls}
               />
             </Field>
           </div>
         </Section>
+
+        {/* ---- Invoice fields (invoice mode only) ---- */}
+        {documentType === "invoice" ? (
+          <Section title="Invoice details">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Payment terms">
+                <input
+                  type="text"
+                  value={paymentTerms}
+                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  placeholder="Net 14"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Payment instructions" colSpan={2}>
+                <textarea
+                  value={paymentInstructions}
+                  onChange={(e) => setPaymentInstructions(e.target.value)}
+                  placeholder="e.g., E-transfer to billing@blacktimbercontracting.ca&#10;Cheques payable to Black Timber Contracting Ltd."
+                  className={`${inputCls} min-h-[72px] font-sans`}
+                />
+              </Field>
+            </div>
+            <p className="text-[10px] text-brand-gray font-mono mt-2">
+              These appear on the printed invoice. GST# pulls from your BUSINESS_GST_NUMBER env var.
+            </p>
+          </Section>
+        ) : null}
 
         {/* ---- Totals ---- */}
         <Section title="Totals (live preview)">
@@ -707,7 +958,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
             ) : null}
           </dl>
           <p className="text-[10px] text-brand-gray mt-3 text-right font-mono">
-            Server recomputes totals on save. Customer-facing quote appears at /admin/quotes/{savedQuoteId ?? "[id]"}.
+            Server recomputes totals on save. Customer-facing {docTypeMeta.label.toLowerCase()} appears at /admin/quotes/{savedQuoteId ?? "[id]"}.
           </p>
         </Section>
 
@@ -737,7 +988,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-brand-black text-sm font-mono uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
-            Save & mark sent
+            {sentLabel}
           </button>
           {savedQuoteId ? (
             <>
@@ -798,6 +1049,10 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
           </div>
         </div>
       </aside>
+
+      {/* Floating Cmd+K command palette. Renders nothing until invoked, */}
+      {/* and is hidden on print. */}
+      <CmdK currentForm={parseFormSnapshot} onApply={handleParseApply} />
     </div>
   );
 }

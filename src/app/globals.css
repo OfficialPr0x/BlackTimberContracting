@@ -256,24 +256,50 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ────────────────────────── Print: /admin/quotes/[id] ────────────────────────
- * Tailwind's `print:` utilities handle most of it on the page itself.
- * What we add here:
- *   - 0.6in margins on letter paper (defaults are wider).
- *   - Force the document body to white-on-black-text just on print, even if
- *     the dark theme has bled into anything we forgot to override inline.
- *   - Hide the global concierge chat reliably (the chat is usePathname-gated
- *     to skip /admin already, but we belt-and-suspenders it for print runs
- *     opened directly from a deep link).
- *   - Avoid breaking line-item rows mid-cell when paginating.
+ * The /admin/quotes/[id] page renders Quotes / Estimates / Invoices on a
+ * white "paper" article with a black accent stripe and a black-on-white
+ * line-item table header. We need print to faithfully reproduce that —
+ * Chrome and most print engines strip background colors by default unless
+ * we ask for them.
+ *
+ *   - 0.55in page margins so the document fits comfortably on letter / A4
+ *     without our existing 12-padding clipping.
+ *   - `print-color-adjust: exact` forces backgrounds (table header, accent
+ *     stripe, payment block) to actually ink.
+ *   - Hide every non-document overlay: concierge chat, Cmd+K launcher,
+ *     mouse spotlight, film grain. Also hide any element with `print:hidden`
+ *     just in case Tailwind hasn't compiled it (defensive belt + braces).
+ *   - Remove the article's drop shadow / rounded corners on print so the
+ *     paper looks like paper, not a UI card.
+ *   - Avoid breaking inside totals/payment/signature blocks when paginating.
  * ──────────────────────────────────────────────────────────────────────────── */
 @media print {
-  @page { margin: 0.6in; }
-  html, body { background: #fff !important; color: #000 !important; }
-  /* Hide any fixed-position overlays that aren't part of the quote body. */
+  @page { margin: 0.55in; }
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    /* Force backgrounds & icons to actually ink on paper. */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Same color-adjust hint applied to every printable element. Required for */
+  /* Firefox/Safari to honor table-header backgrounds and the accent stripe. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Hide any fixed-position overlays that aren't part of the document body. */
   .mouse-spotlight,
   .film-grain { display: none !important; }
   /* Don't split a single line-item row across pages. */
   table tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; } /* Repeat header on each page. */
+  tfoot { display: table-footer-group; }
   /* Make sure links don't pick up any blue-on-print user-agent default. */
   a { color: inherit !important; text-decoration: none !important; }
+  /* Strip the on-screen card chrome from the printable article. */
+  article {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
 }

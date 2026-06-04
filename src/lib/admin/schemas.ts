@@ -68,13 +68,37 @@ export const AdminQuoteCustomer = z.object({
 });
 export type AdminQuoteCustomer = z.infer<typeof AdminQuoteCustomer>;
 
+/**
+ * Project category. Drives copy in the print view and helps the AI parse
+ * scope text + suggest line items. Keep this list in sync with the type
+ * dropdown in `quote-builder.tsx` and the dropdown in `cmd-k.tsx`.
+ */
+export const AdminQuoteProjectType = z.enum([
+  "deck",
+  "pergola",
+  "garage",
+  "addition",
+  "fence",
+  "renovation",
+  "flooring",
+  "roofing",
+  "siding",
+  "interior_finish",
+  "structural_repair",
+  "other",
+]);
+export type AdminQuoteProjectType = z.infer<typeof AdminQuoteProjectType>;
+
 export const AdminQuoteProject = z.object({
-  type: z.enum(["deck", "pergola", "garage", "addition", "fence", "renovation", "other"]),
+  type: AdminQuoteProjectType,
   scopeSummary: z.string().min(1).max(2000),
   // Optional dimensions — used by the AI suggest endpoint to anchor quantities.
-  lengthFt: z.number().min(0).max(200).optional(),
-  widthFt: z.number().min(0).max(200).optional(),
-  material: z.enum(["treated", "cedar", "composite", "mixed", "other"]).optional(),
+  // For decks/additions these are footprint ft. For flooring it's room area.
+  lengthFt: z.number().min(0).max(500).optional(),
+  widthFt: z.number().min(0).max(500).optional(),
+  // Free-form material descriptor — works for "cedar", "vinyl plank", "Hardie",
+  // "engineered hardwood", etc. without forcing a tight enum across trades.
+  material: z.string().max(120).optional(),
   notes: z.string().max(2000).optional(),
 });
 export type AdminQuoteProject = z.infer<typeof AdminQuoteProject>;
@@ -123,22 +147,44 @@ export type AdminQuoteTotals = z.infer<typeof AdminQuoteTotals>;
 // Save / load shapes
 // =============================================================================
 
-/** Shape the client POSTs when creating or updating a quote. */
+/**
+ * Document kind. Same data model, different headers / terms / footer text
+ * on the printed page:
+ *   quote     — formal price commitment, valid until a date.
+ *   estimate  — ballpark, may move; softer tone, expectation-setting.
+ *   invoice   — bill for work performed/in progress; payment terms + due date.
+ *
+ * IDs are prefixed accordingly (`Q-`, `E-`, `I-`) by the storage layer so
+ * the same identifier-space stays unambiguous across all three types.
+ */
+export const AdminDocumentType = z.enum(["quote", "estimate", "invoice"]);
+export type AdminDocumentType = z.infer<typeof AdminDocumentType>;
+
+/** Shape the client POSTs when creating or updating a document. */
 export const AdminQuoteInput = z.object({
-  // Optional — if present, this is an update of an existing quote id.
-  id: z.string().regex(/^Q-\d{8}-[A-Z0-9]{4}$/).optional(),
+  // Optional — if present, this is an update of an existing id.
+  id: z
+    .string()
+    .regex(/^[QEI]-\d{8}-[A-Z0-9]{4}$/, "Document ID must look like Q-YYYYMMDD-XXXX")
+    .optional(),
+  documentType: AdminDocumentType.default("quote"),
   customer: AdminQuoteCustomer,
   project: AdminQuoteProject,
   lines: z.array(AdminQuoteLine).min(1).max(80),
   taxMode: AdminQuoteTaxMode,
   freightCAD: z.number().min(0).max(100_000).default(0),
   // ISO date string (YYYY-MM-DD). Server defaults to +7 days if omitted.
+  // For invoices this is interpreted as the payment-due-by date.
   validUntil: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
     .optional(),
-  status: z.enum(["draft", "sent", "accepted", "declined"]).default("draft"),
+  status: z.enum(["draft", "sent", "accepted", "declined", "paid"]).default("draft"),
   internalNotes: z.string().max(4000).optional(),
+  /** Invoice-only: shown to the customer. Free-form (e.g., "Net 30"). */
+  paymentTerms: z.string().max(120).optional(),
+  /** Invoice-only: payment instructions block (e-transfer email, cheque to, etc). */
+  paymentInstructions: z.string().max(800).optional(),
 });
 export type AdminQuoteInput = z.infer<typeof AdminQuoteInput>;
 
@@ -193,3 +239,69 @@ export const AdminQuoteSuggestOutput = z.object({
   suggestedFreightCAD: z.number().min(0).max(100_000).default(0),
 });
 export type AdminQuoteSuggestOutput = z.infer<typeof AdminQuoteSuggestOutput>;
+
+// =============================================================================
+// AI parse endpoint — Cmd+K "talk to AI about what I'm doing"
+// =============================================================================
+
+/**
+ * Free-form input from the Cmd+K modal. The user types or dictates anything
+ * about the job and we hand it to the model; the model returns a structured
+ * partial that the client merges into the form.
+ *
+ * Optional `currentForm` payload lets the model see what the user has already
+ * filled in (so it doesn't overwrite a phone number with a blank if the user
+ * only mentioned the address).
+ */
+export const AdminQuoteParseInput = z.object({
+  text: z.string().min(8).max(4000),
+  /** Snapshot of the form fields the user has already filled. */
+  currentForm: z
+    .object({
+      customer: AdminQuoteCustomer.partial().optional(),
+      project: AdminQuoteProject.partial({ scopeSummary: true, type: true }).optional(),
+      taxMode: AdminQuoteTaxMode.optional(),
+      documentType: AdminDocumentType.optional(),
+      lineCount: z.number().int().min(0).max(80).optional(),
+    })
+    .optional(),
+});
+export type AdminQuoteParseInput = z.infer<typeof AdminQuoteParseInput>;
+
+/**
+ * Partial quote draft the model returns. EVERY field is optional — the model
+ * returns only what it heard / could ground from the supplier primer. The
+ * client merges these into existing form state without clobbering the
+ * fields the model didn't mention.
+ *
+ * This shape is intentionally a SUBSET of AdminQuoteInput, not the full
+ * thing, because we don't want the model to hallucinate things like a doc
+ * status or an internal-only note.
+ */
+export const AdminQuoteParseOutput = z.object({
+  documentType: AdminDocumentType.optional(),
+  customer: AdminQuoteCustomer.partial().optional(),
+  project: AdminQuoteProject.partial().optional(),
+  lines: z
+    .array(
+      z.object({
+        description: z.string().min(1).max(280),
+        quantity: z.number().min(0).max(100_000),
+        uom: QuoteLineUom,
+        unitPriceCAD: z.number().min(0).max(1_000_000),
+        source: QuoteLineSource,
+        leadTimeDays: z.number().int().min(0).max(365).optional(),
+        notes: z.string().max(280).optional(),
+      })
+    )
+    .max(40)
+    .optional(),
+  taxMode: AdminQuoteTaxMode.optional(),
+  freightCAD: z.number().min(0).max(100_000).optional(),
+  paymentTerms: z.string().max(120).optional(),
+  /** Plain-language summary of what was applied so the UI can show a toast. */
+  appliedSummary: z.string().min(1).max(600),
+  /** Honest list of fields the model wasn't sure about, for the UI to flag. */
+  uncertainties: z.array(z.string().max(280)).max(8).default([]),
+});
+export type AdminQuoteParseOutput = z.infer<typeof AdminQuoteParseOutput>;

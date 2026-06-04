@@ -117,6 +117,59 @@ picked up at Fernie HH unless noted, ranges reflect real seasonal swing):
   Composite/PVC railing systems are almost always SPECIAL ORDER with 2–4
   week lead times and a freight quote attached. Do not promise stock.
 
+  Flooring (typical job-finish prices, materials only at HH PRO unless noted;
+  prefix L = installed labor estimate per sq ft, ranges reflect product tier):
+    - Vinyl plank / luxury vinyl tile (LVT/LVP):
+        Material: $2.00 – $5.50 / sqft     Labor (L): $3.00 – $5.00 / sqft
+    - Laminate (8–12mm AC4):
+        Material: $1.50 – $3.50 / sqft     Labor (L): $2.50 – $3.50 / sqft
+    - Engineered hardwood (3/8"–5/8"):
+        Material: $5.00 – $12.00 / sqft    Labor (L): $4.00 – $7.00 / sqft
+    - Solid hardwood (3/4" prefinished):
+        Material: $7.00 – $14.00 / sqft    Labor (L): $5.00 – $8.00 / sqft
+    - Tile (porcelain/ceramic, mid-range):
+        Material: $2.50 – $8.00 / sqft     Labor (L): $7.00 – $12.00 / sqft
+        Setting materials add $1.50–$2.50/sqft (thinset, grout, edge trim).
+    - Carpet (residential, mid-range with underlay):
+        Material: $2.50 – $5.00 / sqft     Labor (L): $1.50 – $2.25 / sqft
+    - Bullnose / stair-tread caps:
+        Installed: $25 – $45 / linear ft   (vinyl, eng. hardwood, oak)
+    - Underlayment + leveling compound:
+        Material: $0.40 – $1.20 / sqft     Labor patching: $1.00 – $3.00 / sqft
+    - Carpet / old flooring removal + disposal:
+        Labor: $0.75 – $1.50 / sqft        (more for stuck-down adhesive)
+
+  Roofing (typical, materials at HH PRO + roofing wholesalers):
+    - 30-yr architectural asphalt (3-tab and laminate, per bundle covers
+      ~33 sqft / 1 sq covers ~100 sqft):
+        Material: $35 – $55 / bundle       (~$110–$165 per "square")
+        Labor + tear-off: $300 – $550 / square installed
+    - Synthetic underlayment (10 sq roll):  $90 – $140 / roll
+    - Ice-and-water shield (200 sqft roll): $90 – $140 / roll
+    - Drip edge (10 ft):                    $9 – $14 / piece
+    - Metal standing-seam: special order, $9 – $16 / sqft material;
+      installed $14 – $22 / sqft.
+
+  Siding (job-finish):
+    - Hardie plank fiber-cement (12 ft plank, mostly special order):
+        Material: $14 – $22 / plank        Installed: $9 – $14 / sqft
+    - Vinyl siding (D4 or D5 panel):
+        Material: $80 – $140 / square      Installed: $5 – $8 / sqft
+    - Cedar bevel siding:
+        Material: $4 – $7 / lf              Installed: $11 – $16 / sqft
+    - House wrap (Tyvek, 9' x 100' roll):  $230 – $310 / roll
+    - Z-flashing (10 ft):                   $11 – $16 / piece
+
+  Interior finishes (drywall, paint, trim):
+    - Drywall finish (taped, 3-coat, primed):  $1.80 – $2.80 / sqft labor
+      (ceiling adds 25%, level-5 finish doubles labor)
+    - Paint (premium acrylic, 1 gallon):       $55 – $85 / gallon
+    - Paint labor (2 coats walls + cut-in):    $1.50 – $2.50 / sqft
+    - MDF baseboard (standard, 5"):            $1.10 – $1.80 / lf material
+    - MDF casing (5/8" x 2-1/4"):              $0.85 – $1.40 / lf material
+    - Pine 1x4 trim:                           $1.40 – $2.10 / lf
+    - Trim labor (cope-cut, painted finish):   $2.50 – $4.50 / lf installed
+
 Tax model (BC, contractor scenarios — required on every quote):
   - GST 5% applies to almost everything Black Timber sells. Charge GST on
     the pre-PST amount (PST does not stack into GST).
@@ -151,6 +204,12 @@ quote that touches Fernie HH):
       * Decking boards:        +8% to +12%
       * Drywall sheets:        +10% to +15%
       * Fasteners:             +15% (round up to nearest box)
+      * Flooring (rectangular rooms): +8%   (planks/laminate/LVT)
+      * Flooring (diagonal/herringbone or many cuts): +15%
+      * Tile:                   +10%        (more for diagonal layouts)
+      * Asphalt shingles:       +10%        (waste + starter strip)
+      * Siding (vinyl/Hardie):  +10%
+      * Paint:                  1 gal covers ~350 sqft / coat (round up)
   - Never claim live stock counts. Use language like "typically stocked" or
     "usually special order" and flag desk confirmation.
 

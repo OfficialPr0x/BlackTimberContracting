@@ -12,6 +12,8 @@ import {
   Save,
   Loader,
   RefreshCw,
+  Eye,
+  Code2,
   Folder,
   FileText,
   Image as ImageIcon,
@@ -24,6 +26,7 @@ import type { FileNodeDetail, FileNodeRow, FileTreeNode } from "@/lib/admin/file
 import { guessViewer } from "@/lib/admin/files/types";
 
 type MobilePane = "files" | "editor" | "chat";
+type MdViewMode = "preview" | "source";
 
 interface ChatMsg {
   role: "user" | "assistant";
@@ -103,6 +106,7 @@ export default function BookkeeperWorkspace() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [file, setFile] = useState<FileNodeDetail | null>(null);
   const [mdDraft, setMdDraft] = useState("");
+  const [mdView, setMdView] = useState<MdViewMode>("preview");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -193,6 +197,7 @@ export default function BookkeeperWorkspace() {
     const detail = body as FileNodeDetail;
     setFile(detail);
     setMdDraft(detail.textContent ?? "");
+    setMdView("preview");
     setMobilePane("editor");
   }, []);
 
@@ -267,6 +272,7 @@ export default function BookkeeperWorkspace() {
       if (!res.ok) throw new Error(body?.error?.message ?? "AI edit failed");
       setMdDraft(body.content as string);
       await saveMarkdown();
+      setMdView("preview");
     } catch (e) {
       setError(e instanceof Error ? e.message : "AI edit failed");
     } finally {
@@ -434,9 +440,45 @@ export default function BookkeeperWorkspace() {
         <>
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-brand-border">
             <span className="text-xs font-mono text-brand-gold truncate">{file.name}</span>
-            <div className="flex gap-1 shrink-0">
+            <div className="flex gap-1 shrink-0 items-center">
               {viewer === "markdown" ? (
                 <>
+                  <div
+                    className="flex rounded-lg border border-brand-border overflow-hidden text-[9px] font-mono uppercase tracking-wider mr-1"
+                    role="tablist"
+                    aria-label="Markdown view"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={mdView === "preview"}
+                      onClick={() => setMdView("preview")}
+                      className={`flex items-center gap-1 px-2 py-1 transition-colors ${
+                        mdView === "preview"
+                          ? "bg-brand-gold/20 text-brand-gold"
+                          : "text-brand-gray hover:text-white"
+                      }`}
+                      title="Rendered preview"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span className="hidden sm:inline">Preview</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={mdView === "source"}
+                      onClick={() => setMdView("source")}
+                      className={`flex items-center gap-1 px-2 py-1 border-l border-brand-border transition-colors ${
+                        mdView === "source"
+                          ? "bg-brand-gold/20 text-brand-gold"
+                          : "text-brand-gray hover:text-white"
+                      }`}
+                      title="Edit markdown source"
+                    >
+                      <Code2 className="w-3 h-3" />
+                      <span className="hidden sm:inline">Source</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void aiEditMarkdown()}
@@ -471,19 +513,21 @@ export default function BookkeeperWorkspace() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {viewer === "markdown" ? (
-              <div className="grid lg:grid-cols-2 h-full min-h-[280px]">
+              mdView === "source" ? (
                 <textarea
                   value={mdDraft}
                   onChange={(e) => setMdDraft(e.target.value)}
-                  className="w-full h-full min-h-[240px] bg-brand-black border-0 border-r border-brand-border p-3 text-sm text-white font-mono resize-none focus:outline-none focus:ring-1 focus:ring-brand-gold/40"
+                  className="flex-1 w-full min-h-0 bg-brand-black p-4 text-sm text-white font-mono resize-none focus:outline-none focus:ring-1 focus:ring-inset focus:ring-brand-gold/40"
                   spellCheck
+                  aria-label="Markdown source"
                 />
-                <div className="overflow-y-auto p-3 prose-invert text-sm hidden lg:block">
-                  <Markdown>{mdDraft || "*Preview*"}</Markdown>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 text-sm prose-invert max-w-none">
+                  <Markdown>{mdDraft || "*Empty note*"}</Markdown>
                 </div>
-              </div>
+              )
             ) : viewer === "pdf" && file.downloadUrl ? (
               <iframe
                 title={file.name}

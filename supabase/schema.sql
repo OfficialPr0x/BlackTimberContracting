@@ -598,6 +598,8 @@ revoke all on public.rate_limit_events from anon, authenticated;
 -- =============================================================================
 -- DONE. Next steps (in your app / Vercel):
 --   SUPABASE_URL=https://xxxx.supabase.co
---   SUPABASE_SERVICE_ROLE_KEY=eyJ...   (Settings → API → service_role — secret!)
---   Do NOT expose service_role to the browser.
+--   SUPABASE_SECRET_KEY=sb_secret_...   (or legacy SUPABASE_SERVICE_ROLE_KEY)
+--   Do NOT expose secret keys to the browser.
+--
+-- Also run: supabase/files-schema.sql (admin file vault + btc-admin-files bucket)
 -- =============================================================================

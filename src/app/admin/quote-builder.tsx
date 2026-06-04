@@ -47,12 +47,14 @@ import {
   validateDraftForSave,
   type LineDraft,
 } from "@/lib/admin/draft-helpers";
+import { cacheSavedDocument } from "@/lib/admin/saved-doc-cache";
 import type {
   AdminDocumentType,
   AdminQuoteCustomer,
   AdminQuoteParseOutput,
   AdminQuoteProject,
   AdminQuoteProjectType,
+  AdminQuoteSaved,
   AdminQuoteTaxMode,
   QuoteLineSource,
   QuoteLineUom,
@@ -370,6 +372,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
         if (!res.ok) {
           throw new Error(body?.error?.message ?? `Save failed (${res.status})`);
         }
+        cacheSavedDocument(body as AdminQuoteSaved);
         setSavedQuoteId(body.id);
         setRecentQuotes((prev) => {
           const filtered = prev.filter((q) => q.id !== body.id);

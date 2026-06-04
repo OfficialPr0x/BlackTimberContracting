@@ -149,6 +149,16 @@ export async function saveQuote(
     return saveQuoteSupabase(record);
   }
 
+  if (process.env.VERCEL) {
+    throw new AiError({
+      code: "internal",
+      status: 503,
+      clientMessage:
+        "Saving on Vercel requires Supabase. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in project settings, run supabase/schema.sql, then try again.",
+      message: "Quote persistence disabled on Vercel without Supabase (ephemeral /tmp is not shared across requests).",
+    });
+  }
+
   try {
     await appendLine(record);
   } catch (err) {

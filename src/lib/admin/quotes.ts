@@ -28,86 +28,20 @@ import {
   listQuotesSupabase,
   saveQuoteSupabase,
 } from "./quotes-supabase";
+import { computeQuoteTotals } from "./quote-totals";
 import type {
   AdminDocumentType,
   AdminQuoteInput,
   AdminQuoteSaved,
-  AdminQuoteTaxMode,
-  AdminQuoteTotals,
-  AdminQuoteLine,
 } from "./schemas";
+
+export { computeQuoteTotals } from "./quote-totals";
 
 // Vercel serverless FS is read-only except /tmp — default JSONL path must not
 // be ./.data on production or save returns 500.
 const QUOTES_FILE =
   process.env.QUOTES_LOG_FILE ??
   (process.env.VERCEL ? "/tmp/quotes.jsonl" : "./.data/quotes.jsonl");
-const GST_RATE = 0.05;
-const PST_RATE = 0.07;
-
-// -----------------------------------------------------------------------------
-// Totals — server-side source of truth
-// -----------------------------------------------------------------------------
-
-/**
- * Compute every total field from raw line items + tax mode + freight.
- *
- * BC tax model (per src/lib/openrouter/supplier-knowledge.ts):
- *   real_property_install →  GST 5% on (subtotal + freight). NO PST shown
- *                            (Black Timber paid PST at the supplier).
- *   supply_only           →  GST 5% AND PST 7%, both on (subtotal + freight).
- *   mixed_split           →  Same as supply_only here — the UI flags that a
- *                            mixed contract should be split into TWO quotes.
- *                            We refuse to silently average; the conservative
- *                            default is "tax everything visible" until the
- *                            split is done by hand.
- *   exempt                →  GST 5%, no PST.
- *
- * Per CRA guidance, GST does NOT stack on top of PST in BC, so both taxes
- * are calculated on the same pre-tax base.
- */
-export function computeQuoteTotals(
-  lines: AdminQuoteLine[],
-  taxMode: AdminQuoteTaxMode,
-  freightCAD: number
-): AdminQuoteTotals {
-  const subtotalCAD = round2(
-    lines.reduce((acc, l) => acc + l.quantity * l.unitPriceCAD, 0)
-  );
-  const taxableBase = round2(subtotalCAD + freightCAD);
-
-  const gstCAD = round2(taxableBase * GST_RATE);
-  const pstCAD =
-    taxMode === "supply_only" || taxMode === "mixed_split"
-      ? round2(taxableBase * PST_RATE)
-      : 0;
-
-  const grandTotalCAD = round2(taxableBase + gstCAD + pstCAD);
-
-  // Lead time = max across any line that flagged one. 0 means everything is
-  // stocked or doesn't carry an explicit lead time.
-  let maxLeadTimeDays = 0;
-  for (const l of lines) {
-    if (typeof l.leadTimeDays === "number" && l.leadTimeDays > maxLeadTimeDays) {
-      maxLeadTimeDays = l.leadTimeDays;
-    }
-  }
-
-  return {
-    subtotalCAD,
-    freightCAD: round2(freightCAD),
-    gstCAD,
-    pstCAD,
-    grandTotalCAD,
-    maxLeadTimeDays,
-  };
-}
-
-function round2(n: number): number {
-  // Banker's rounding would be nice for currency, but Math.round is what
-  // every other JS quoting tool does — keep behavior boringly consistent.
-  return Math.round(n * 100) / 100;
-}
 
 // -----------------------------------------------------------------------------
 // IDs and dates
@@ -199,7 +133,7 @@ export async function saveQuote(
     project: input.project,
     lines,
     taxMode: input.taxMode,
-    freightCAD: round2(input.freightCAD),
+    freightCAD: totals.freightCAD,
     validUntil,
     status: input.status,
     internalNotes: input.internalNotes,

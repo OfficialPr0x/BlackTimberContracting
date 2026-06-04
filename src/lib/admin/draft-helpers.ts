@@ -2,7 +2,7 @@
  * Draft helpers for the /admin quote builder — easier save + PDF preview.
  */
 
-import { computeQuoteTotals } from "./quotes";
+import { computeQuoteTotals } from "./quote-totals";
 import type {
   AdminDocumentType,
   AdminQuoteCustomer,

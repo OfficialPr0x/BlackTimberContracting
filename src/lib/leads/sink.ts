@@ -40,7 +40,7 @@ export async function deliverLead(lead: LeadInput): Promise<DeliveryResult> {
   // --- 2. Email sink (Resend, optional) -------------------------------------
   if (process.env.RESEND_API_KEY && process.env.LEAD_NOTIFICATION_EMAIL) {
     try {
-      await sendEmail(lead);
+      await sendLeadNotificationEmail(lead);
       delivered.email = true;
     } catch (err) {
       errors.push(`email: ${(err as Error).message}`);
@@ -75,24 +75,17 @@ async function appendToFile(lead: LeadInput): Promise<void> {
 }
 
 // -----------------------------------------------------------------------------
-// Email sink: Resend. The package is installed but only instantiated when
-// RESEND_API_KEY + LEAD_NOTIFICATION_EMAIL are present (guard in deliverLead).
+// Email sink: Resend (see src/lib/resend/)
 // -----------------------------------------------------------------------------
-import { Resend } from "resend";
+import { sendEmail as sendResendEmail } from "@/lib/resend/send-email";
 
-async function sendEmail(lead: LeadInput): Promise<void> {
-  const client = new Resend(process.env.RESEND_API_KEY!);
-  const subject = `New ${humanLabel(lead.source)} lead — ${lead.contact.name}`;
-  const html = renderEmailHtml(lead);
-
-  const { error } = await client.emails.send({
-    from: process.env.LEAD_FROM_EMAIL ?? "leads@blacktimbercontracting.com",
-    to: [process.env.LEAD_NOTIFICATION_EMAIL!],
+async function sendLeadNotificationEmail(lead: LeadInput): Promise<void> {
+  await sendResendEmail({
+    to: process.env.LEAD_NOTIFICATION_EMAIL!,
     replyTo: lead.contact.email,
-    subject,
-    html,
+    subject: `New ${humanLabel(lead.source)} lead — ${lead.contact.name}`,
+    html: renderEmailHtml(lead),
   });
-  if (error) throw new Error(`Resend rejected: ${error.message}`);
 }
 
 // -----------------------------------------------------------------------------

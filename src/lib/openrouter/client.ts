@@ -203,6 +203,12 @@ interface ChatJSONOptions<T> {
    * schemas (Cmd+K parse) — strict mode often 400s on GPT-5 with many optionals.
    */
   strict?: boolean;
+  /**
+   * Use `{ type: "json_object" }` instead of json_schema. Far more reliable
+   * across providers (Gemini Flash, Haiku). Zod still validates the response.
+   * Pair with `jsonSchemaHint` in the user message.
+   */
+  jsonObject?: boolean;
   /** Cap how many models in the fallback chain to try. Default: entire chain. */
   maxModels?: number;
   /** Pass-through provider routing if you need OpenAI/Anthropic-specific options. */
@@ -215,9 +221,17 @@ export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
   let lastError: unknown;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const strict = opts.strict ?? true;
+  const useJsonObject = opts.jsonObject ?? false;
 
   // Build the JSON Schema once and reuse across retries / fallbacks.
   const jsonSchema = getJsonSchema(opts.schemaName, opts.schema as z.ZodType);
+
+  const responseFormat: Record<string, unknown> = useJsonObject
+    ? { type: "json_object" }
+    : {
+        type: "json_schema",
+        json_schema: { name: opts.schemaName, strict, schema: jsonSchema },
+      };
 
   for (const model of chain) {
     try {
@@ -226,13 +240,7 @@ export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
         {
           messages: opts.messages,
           temperature: opts.temperature ?? 0.2,
-          // Structured output — strict when the schema is fully required; loose
-          // for partial Cmd+K parse shapes. See:
-          // https://openrouter.ai/docs/features/structured-outputs
-          response_format: {
-            type: "json_schema",
-            json_schema: { name: opts.schemaName, strict, schema: jsonSchema },
-          },
+          response_format: responseFormat,
           // OpenRouter usage accounting (cost in USD) — opt-in per request.
           usage: { include: true },
           ...opts.extraBody,
@@ -243,10 +251,13 @@ export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
 
       if (!res.ok) {
         const body = await safeReadText(res);
+        const isLast = model === chain[chain.length - 1];
         lastError = new AiError({
           code: "upstream_failed",
           status: 502,
-          clientMessage: "AI request failed — trying a backup model.",
+          clientMessage: isLast
+            ? `AI failed on all models. Check OPENROUTER_API_KEY in Vercel. (${res.status})`
+            : "AI request failed — trying a backup model.",
           message: `OpenRouter ${res.status} on ${model}: ${body.slice(0, 400)}`,
         });
         continue;

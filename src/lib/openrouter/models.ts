@@ -23,7 +23,7 @@ export const MODELS: Record<ModelTask, string> = {
   intel:    process.env.OPENROUTER_MODEL_INTEL    ?? "perplexity/sonar-reasoning-pro",
   sketch:   process.env.OPENROUTER_MODEL_SKETCH   ?? "google/gemini-2.5-pro",
   explain:  process.env.OPENROUTER_MODEL_EXPLAIN  ?? "openai/gpt-5",
-  // Parse must answer in <20s on Vercel — Flash first, Sonnet backup. Never GPT-5 here.
+  // Cmd+K parse: fast models with reliable json_object mode (see client.ts).
   parse:    process.env.OPENROUTER_MODEL_PARSE    ?? "google/gemini-2.5-flash",
   // Chat defaults to Claude Sonnet — it starts emitting tokens within ~1s
   // vs GPT-5's 5–10s first-token latency, which is the difference between
@@ -42,8 +42,11 @@ export const FALLBACK_CHAIN: Record<ModelTask, string[]> = {
   intel:   [MODELS.intel,   "google/gemini-2.5-pro",       MODELS.fallback],
   sketch:  [MODELS.sketch,  "anthropic/claude-sonnet-4.5", MODELS.fallback],
   explain: [MODELS.explain, "anthropic/claude-sonnet-4.5", MODELS.fallback],
-  // Two models only — a third try was blowing the 60s Vercel budget.
-  parse:   [MODELS.parse,   "anthropic/claude-sonnet-4.5"],
+  // Flash → Haiku (both support json_object; avoid Sonnet/GPT-5 for parse).
+  parse:   [
+    MODELS.parse,
+    process.env.OPENROUTER_MODEL_PARSE_FALLBACK ?? "anthropic/claude-3.5-haiku",
+  ],
   chat:    [MODELS.chat,    "openai/gpt-5",                MODELS.fallback],
   fallback:[MODELS.fallback],
 };

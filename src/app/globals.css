@@ -298,8 +298,17 @@ h1, h2, h3, h4, h5, h6 {
   /* Make sure links don't pick up any blue-on-print user-agent default. */
   a { color: inherit !important; text-decoration: none !important; }
   /* Strip the on-screen card chrome from the printable article. */
-  article {
+  article,
+  .btc-document {
     box-shadow: none !important;
     border-radius: 0 !important;
+  }
+
+  /* Black Timber branded document — force header/footer colors on paper */
+  .btc-document header,
+  .btc-document footer,
+  .btc-document thead tr {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

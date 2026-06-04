@@ -30,6 +30,20 @@ import { checkRate } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/** Shown to the model when using json_object mode (no strict json_schema). */
+const PARSE_JSON_HINT = `
+Return ONE JSON object only. Required: "appliedSummary" (string), "uncertainties" (string array, can be []).
+Optional fields — omit if unknown:
+  documentType: "quote" | "estimate" | "invoice"
+  customer: { name?, email?, phone?, billingAddress?, jobSiteAddress? }
+  project: { type?, scopeSummary?, lengthFt?, widthFt?, material?, notes? }
+  lines: [{ description, quantity, uom, unitPriceCAD, source, leadTimeDays?, notes? }]
+  taxMode: "real_property_install" | "supply_only" | "mixed_split" | "exempt"
+  freightCAD: number
+  paymentTerms: string
+If the user gave explicit $/sqft or $/LF prices, use those as unitPriceCAD. CAD only.
+`.trim();
+
 export async function POST(req: Request) {
   try {
     const auth = await requireAdminRoute();
@@ -65,7 +79,7 @@ export async function POST(req: Request) {
         ? `Current form snapshot (DON'T overwrite these unless you have explicit new info):\n${JSON.stringify(input.currentForm, null, 2)}`
         : "Current form is empty.",
       "",
-      "Return a STRICT JSON partial of the AdminQuoteParseOutput schema. Only include fields you actually heard or could defensibly infer from the supplier primer.",
+      PARSE_JSON_HINT,
     ].join("\n");
 
     const messages: ChatMessage[] = [
@@ -73,17 +87,16 @@ export async function POST(req: Request) {
       { role: "user", content: userMessage },
     ];
 
-    // Dedicated "parse" task: Gemini Flash → Claude Sonnet, ~22s timeout each.
-    // Do NOT use "explain" (GPT-5 primary) — it 502s on Vercel from slow/failed
-    // strict-json calls before fallbacks finish.
+    // json_object + Zod validation — works on Gemini Flash & Claude Haiku.
+    // json_schema strict mode was 502ing in production.
     const result = await chatJSON({
       task: "parse",
       schema: AdminQuoteParseOutput,
       schemaName: "AdminQuoteParseOutput",
       messages,
       temperature: 0.1,
-      timeoutMs: 22_000,
-      strict: false,
+      timeoutMs: 14_000,
+      jsonObject: true,
       maxModels: 2,
     });
 

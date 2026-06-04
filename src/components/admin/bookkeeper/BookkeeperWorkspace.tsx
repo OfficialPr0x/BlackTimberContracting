@@ -11,6 +11,7 @@ import {
   Sparkles,
   Save,
   Loader,
+  RefreshCw,
   Folder,
   FileText,
   Image as ImageIcon,
@@ -111,6 +112,7 @@ export default function BookkeeperWorkspace() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatPending, setChatPending] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
@@ -122,11 +124,62 @@ export default function BookkeeperWorkspace() {
     return body.nodes as FileNodeRow[];
   }, []);
 
+  /** Mirror Q-/E-/I- from documents table into vault folder Quotes & Invoices */
+  const syncQuotesToVault = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/admin/files/sync-quotes", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error?.message ?? `Sync failed (${res.status})`);
+      }
+      if (body.tree) setTree(body.tree as FileTreeNode[]);
+      const folderId = body.sync?.quotesFolderId as string | null | undefined;
+      if (folderId) {
+        setExpanded((prev) => new Set(prev).add(folderId));
+      }
+      const sync = body.sync as {
+        created?: number;
+        updated?: number;
+        totalDocuments?: number;
+        errors?: string[];
+      };
+      if (sync?.errors?.length) {
+        setError(`Vault sync: ${sync.errors.slice(0, 3).join("; ")}`);
+      }
+      return sync;
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
   useEffect(() => {
-    refreshTree()
-      .catch((e) => setError(e instanceof Error ? e.message : "Load failed"))
-      .finally(() => setLoading(false));
-  }, [refreshTree]);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await syncQuotesToVault();
+      } catch (e) {
+        if (!cancelled) {
+          try {
+            await refreshTree();
+          } catch {
+            /* refresh also failed */
+          }
+          const msg = e instanceof Error ? e.message : "Load failed";
+          if (!msg.includes("503") && !msg.toLowerCase().includes("not configured")) {
+            setError(msg);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTree, syncQuotesToVault]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -251,7 +304,7 @@ export default function BookkeeperWorkspace() {
 
       const created = body.created as Array<{ type: string; id: string; name: string }> | undefined;
       if (created?.length) {
-        await refreshTree();
+        await syncQuotesToVault().catch(() => refreshTree());
         const md = created.find(
           (c) => c.type === "create_markdown" || c.type === "archive_document"
         );
@@ -323,6 +376,15 @@ export default function BookkeeperWorkspace() {
           className="p-2 rounded-lg border border-brand-border hover:border-brand-gold text-brand-gray hover:text-brand-gold"
         >
           <FilePlus className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          title="Sync quotes & invoices from database into Quotes & Invoices folder"
+          disabled={syncing || loading}
+          onClick={() => void syncQuotesToVault().catch((e) => setError(e instanceof Error ? e.message : "Sync failed"))}
+          className="p-2 rounded-lg border border-brand-border hover:border-brand-gold text-brand-gray hover:text-brand-gold disabled:opacity-40"
+        >
+          <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
         </button>
         <button
           type="button"

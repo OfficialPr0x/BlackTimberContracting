@@ -27,7 +27,7 @@ export async function saveQuoteSupabase(record: AdminQuoteSaved): Promise<AdminQ
       code: "internal",
       status: 503,
       clientMessage:
-        "Database not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel.",
+        "Database not configured. Add SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) in Vercel — not the publishable key.",
       message: "Supabase client unavailable",
     });
   }

@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 
 import { getAdminSession } from "@/lib/admin/session";
 import { listQuotes } from "@/lib/admin/quotes";
+import { getSupabaseConfigStatus } from "@/lib/supabase/server";
 import { logoutAction } from "./actions";
 import QuoteBuilder from "./quote-builder";
 
@@ -32,6 +33,7 @@ export default async function AdminHomePage() {
   // Show the 25 most recent — enough to find a recent quote, small enough
   // to render fast even after years of use.
   const recentQuotes = await listQuotes(25);
+  const storage = getSupabaseConfigStatus();
 
   return (
     <main className="min-h-screen bg-brand-black text-foreground">
@@ -57,6 +59,28 @@ export default async function AdminHomePage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-5 py-8">
+        {!storage.ok ? (
+          <div
+            className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+            role="alert"
+          >
+            <p className="font-medium text-amber-200">Saves are disabled — Supabase secret key missing</p>
+            <p className="mt-1 text-amber-100/90 text-xs leading-relaxed">
+              Add{" "}
+              <span className="font-mono text-amber-300">SUPABASE_SECRET_KEY</span> in{" "}
+              {storage.isVercel ? "Vercel → Environment Variables" : ".env.local"} (value starts with{" "}
+              <span className="font-mono">sb_secret_</span> from Supabase → Settings → API → Secret keys).
+              The publishable key (<span className="font-mono">sb_publishable_</span>) cannot save quotes.
+              {storage.missing.length > 0 ? (
+                <>
+                  {" "}
+                  Missing: {storage.missing.join(", ")}.
+                </>
+              ) : null}{" "}
+              Run <span className="font-mono">supabase/schema.sql</span> in the SQL Editor, then redeploy.
+            </p>
+          </div>
+        ) : null}
         <QuoteBuilder
           initialRecentQuotes={recentQuotes.map((q) => ({
             id: q.id,

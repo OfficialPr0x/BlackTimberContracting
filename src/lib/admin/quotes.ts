@@ -153,12 +153,14 @@ export async function saveQuote(
     const { url, serviceRoleKey } = getSupabaseServerConfig();
     const missing = [
       !url ? "SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)" : null,
-      !serviceRoleKey ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+      !serviceRoleKey
+        ? "SUPABASE_SECRET_KEY (sb_secret_…) or SUPABASE_SERVICE_ROLE_KEY"
+        : null,
     ].filter(Boolean);
     throw new AiError({
       code: "internal",
       status: 503,
-      clientMessage: `Saving on Vercel requires Supabase. Add ${missing.join(" and ")} in Vercel → Environment Variables (service_role from Supabase → Settings → API), run supabase/schema.sql, then redeploy.`,
+      clientMessage: `Saving requires a Supabase secret key. In Vercel → Environment Variables add ${missing.join(" and ")} (Supabase → Settings → API → Secret keys, NOT the publishable key). Run supabase/schema.sql, then redeploy.`,
       message: `Quote persistence disabled on Vercel without Supabase. Missing: ${missing.join(", ")}`,
     });
   }

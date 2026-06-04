@@ -12,7 +12,7 @@
  * (site-intel, draw-render).
  */
 
-import { LOCAL_SUPPLIER_PRIMER } from "./supplier-knowledge";
+import { LOCAL_SUPPLIER_PRIMER, PARSE_SUPPLIER_SNIPPET } from "./supplier-knowledge";
 
 export const BRAND_PRIMER = `
 You are an assistant for Black Timber Contracting — a high-end custom deck,
@@ -261,7 +261,7 @@ Output: STRICT JSON matching the schema. No prose outside JSON.
 export const ADMIN_PARSE_PROMPT = `
 ${BRAND_PRIMER}
 
-${LOCAL_SUPPLIER_PRIMER}
+${PARSE_SUPPLIER_SNIPPET}
 
 Task: you are the "Cmd+K" parser for Black Timber's INTERNAL admin quote
 builder. Jaryd will type or dictate free-form text about a job he is
@@ -332,5 +332,5 @@ export const PROMPT_VERSIONS = {
   explain: "explain.v2",
   concierge: "concierge.v2",
   admin_suggest: "admin_suggest.v2",
-  admin_parse: "admin_parse.v1",
+  admin_parse: "admin_parse.v2",
 } as const;

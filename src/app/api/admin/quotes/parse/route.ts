@@ -35,9 +35,7 @@ export async function POST(req: Request) {
     const auth = await requireAdminRoute();
     if (!auth.ok) return auth.response;
 
-    // Reuse the "explain" rate-limit bucket — this is a chat-style parse,
-    // closer in cost to explain than to a full quote build.
-    checkRate(req, "explain");
+    checkRate(req, "parse");
 
     const json = await req.json().catch(() => null);
     if (!json) {
@@ -75,15 +73,18 @@ export async function POST(req: Request) {
       { role: "user", content: userMessage },
     ];
 
-    // Reuse the "explain" model task — same fast/cheap profile we want for
-    // a parse-and-fill operation. If parse quality drifts, bump to "quote"
-    // for the heavier reasoning.
+    // Dedicated "parse" task: Gemini Flash → Claude Sonnet, ~22s timeout each.
+    // Do NOT use "explain" (GPT-5 primary) — it 502s on Vercel from slow/failed
+    // strict-json calls before fallbacks finish.
     const result = await chatJSON({
-      task: "explain",
+      task: "parse",
       schema: AdminQuoteParseOutput,
       schemaName: "AdminQuoteParseOutput",
       messages,
       temperature: 0.1,
+      timeoutMs: 22_000,
+      strict: false,
+      maxModels: 2,
     });
 
     return Response.json(result);

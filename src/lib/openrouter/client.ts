@@ -196,14 +196,25 @@ interface ChatJSONOptions<T> {
   noCache?: boolean;
   /** Override per-request cost cap. */
   maxUsd?: number;
+  /** Per-model HTTP timeout. Default 60s; parse uses ~22s so fallbacks fit in Vercel. */
+  timeoutMs?: number;
+  /**
+   * OpenRouter json_schema strict mode. Default true. Use false for partial
+   * schemas (Cmd+K parse) — strict mode often 400s on GPT-5 with many optionals.
+   */
+  strict?: boolean;
+  /** Cap how many models in the fallback chain to try. Default: entire chain. */
+  maxModels?: number;
   /** Pass-through provider routing if you need OpenAI/Anthropic-specific options. */
   extraBody?: Record<string, unknown>;
 }
 
 export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
-  const chain = FALLBACK_CHAIN[opts.task];
+  const chain = FALLBACK_CHAIN[opts.task].slice(0, opts.maxModels ?? FALLBACK_CHAIN[opts.task].length);
   const startedAt = Date.now();
   let lastError: unknown;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const strict = opts.strict ?? true;
 
   // Build the JSON Schema once and reuse across retries / fallbacks.
   const jsonSchema = getJsonSchema(opts.schemaName, opts.schema as z.ZodType);
@@ -215,20 +226,18 @@ export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
         {
           messages: opts.messages,
           temperature: opts.temperature ?? 0.2,
-          // STRICT structured output — OpenRouter forces providers to match
-          // the schema exactly. This is the difference between "model returns
-          // some JSON we hope is right" and "model returns JSON guaranteed to
-          // have every required field." See:
+          // Structured output — strict when the schema is fully required; loose
+          // for partial Cmd+K parse shapes. See:
           // https://openrouter.ai/docs/features/structured-outputs
           response_format: {
             type: "json_schema",
-            json_schema: { name: opts.schemaName, strict: true, schema: jsonSchema },
+            json_schema: { name: opts.schemaName, strict, schema: jsonSchema },
           },
           // OpenRouter usage accounting (cost in USD) — opt-in per request.
           usage: { include: true },
           ...opts.extraBody,
         },
-        DEFAULT_TIMEOUT_MS,
+        timeoutMs,
         false
       );
 

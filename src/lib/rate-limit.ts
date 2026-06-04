@@ -38,6 +38,7 @@ export const LIMITS = {
   intel:    { limit: 5,  windowSec: 60 },   // 5/min per IP
   sketch:   { limit: 6,  windowSec: 60 },   // 6/min per IP — drawings are short calls
   explain:  { limit: 20, windowSec: 60 },   // 20/min — cheap explanatory text
+  parse:    { limit: 15, windowSec: 60 },   // 15/min — Cmd+K admin form fill
   chat:     { limit: 30, windowSec: 60 },   // 30/min for streaming chat
   leads:    { limit: 5,  windowSec: 300 },  // 5/5min per IP — strict (anti-spam)
 } as const satisfies Record<string, { limit: number; windowSec: number }>;

@@ -217,3 +217,25 @@ Closing rule: this primer makes the AI sound like a Kootenay journeyman who
 buys at Fernie HH every week. It does NOT replace real desk pricing or a
 site visit, and the AI must keep saying so.
 `.trim();
+
+/**
+ * Condensed primer for Cmd+K parse only (~2k tokens vs ~12k for the full doc).
+ * Keeps flooring/deck ballparks + BC tax rules so parse stays fast on Vercel.
+ */
+export const PARSE_SUPPLIER_SNIPPET = `
+Fernie Home Hardware PRO — parse-time ballparks (CAD, 2026 East Kootenay):
+  Flooring:
+    LVP material $2–$5.50/sqft, install labor $3–$5/sqft
+    Laminate material $1.50–$3.50/sqft, labor $2.50–$3.50/sqft
+    Bullnose / stair treads installed $25–$45/LF
+    Carpet removal $0.75–$1.50/sqft labor
+    Underlayment $0.40–$1.20/sqft material
+    Waste: +8% rectangular rooms, +15% diagonal/many cuts
+  Baseboard trim installed: $2.50–$4.50/LF labor + $1.10–$1.80/LF MDF material
+  Deck PT framing: use full suggest endpoint for big decks; parse can add labor lines.
+  Tax (BC): real_property_install = GST 5% only on invoice (no PST line to customer).
+  Default taxMode for installed flooring/deck work: real_property_install.
+  Source tags: fernie_hh_stocked | fernie_hh_special_order | labor | other_supplier | subcontractor | other
+  UOM: SQFT for flooring, LF for trim/baseboard/bullnose, EA for lump sums, HR/DAY for crew.
+  If user gives explicit $/sqft or $/LF, USE THOSE as unitPriceCAD — do not override with ballparks.
+`.trim();

@@ -46,7 +46,10 @@ export async function loadQuoteSupabase(id: string): Promise<AdminQuoteSaved | n
   if (!sb) return null;
 
   const { data, error } = await sb.rpc("get_document", { p_id: id });
-  if (error) supabaseError("get_document", error);
+  if (error) {
+    console.error("[get_document]", error.message);
+    return null;
+  }
   if (!data) return null;
 
   return data as AdminQuoteSaved;
@@ -58,9 +61,13 @@ export async function listQuotesSupabase(limit = 50): Promise<AdminQuoteSaved[]>
   if (!sb) return [];
 
   const { data, error } = await sb.rpc("list_documents", { p_limit: limit });
-  if (error) supabaseError("list_documents", error);
+  if (error) {
+    console.error("[list_documents]", error.message);
+    return [];
+  }
 
-  const rows = (data ?? []) as Array<{
+  const raw = data ?? [];
+  const rows = (Array.isArray(raw) ? raw : []) as Array<{
     id: string;
     customerName: string;
     grandTotalCAD: number;

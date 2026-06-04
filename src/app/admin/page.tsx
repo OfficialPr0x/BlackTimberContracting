@@ -30,10 +30,18 @@ export default async function AdminHomePage() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login?from=/admin");
 
-  // Show the 25 most recent — enough to find a recent quote, small enough
-  // to render fast even after years of use.
-  const recentQuotes = await listQuotes(25);
   const storage = getSupabaseConfigStatus();
+  let recentQuotes: Awaited<ReturnType<typeof listQuotes>> = [];
+  let storageLoadError: string | null = null;
+  try {
+    recentQuotes = await listQuotes(25);
+  } catch (err) {
+    console.error("[admin] listQuotes failed", err);
+    storageLoadError =
+      err instanceof Error
+        ? err.message
+        : "Could not load recent quotes from the database.";
+  }
 
   return (
     <main className="min-h-screen bg-brand-black text-foreground">
@@ -59,6 +67,19 @@ export default async function AdminHomePage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-5 py-8">
+        {storageLoadError ? (
+          <div
+            className="mb-6 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+            role="alert"
+          >
+            <p className="font-medium">Could not load saved quotes</p>
+            <p className="mt-1 text-xs text-red-200/90">
+              Run <span className="font-mono">supabase/schema.sql</span> in the Supabase SQL Editor and
+              confirm <span className="font-mono">SUPABASE_SECRET_KEY</span> is the secret key (not
+              publishable). You can still build quotes; saving may fail until this is fixed.
+            </p>
+          </div>
+        ) : null}
         {!storage.ok ? (
           <div
             className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"

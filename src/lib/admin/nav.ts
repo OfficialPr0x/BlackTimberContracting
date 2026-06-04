@@ -33,7 +33,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     href: "/admin/bookkeeper",
     label: "AI Bookkeeper",
     shortLabel: "Books",
-    description: "File vault, receipts, markdown IDE + AI",
+    description: "Vault + live quotes/invoices, receipts, AI filing",
     icon: Calculator,
   },
   {

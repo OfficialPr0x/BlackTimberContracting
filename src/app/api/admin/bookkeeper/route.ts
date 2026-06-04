@@ -13,6 +13,14 @@ import {
   formatVaultTreeForPrompt,
 } from "@/lib/admin/files/bookkeeper-actions";
 import { listFileNodes } from "@/lib/admin/files/repository";
+import {
+  analyzePaperworkGaps,
+  extractDocumentIdsFromMessages,
+  fetchDocumentsForBookkeeper,
+  formatDocumentDetailForPrompt,
+  formatDocumentsRegisterForPrompt,
+  loadDocumentsForBookkeeper,
+} from "@/lib/admin/bookkeeper-documents";
 import { checkRate } from "@/lib/rate-limit";
 import { z } from "zod";
 
@@ -41,11 +49,14 @@ Return ONE JSON object only:
   "reply": "markdown answer for Jaryd",
   "actions": [
     { "type": "create_folder", "name": "2026 Q1", "parentFolderName": "Receipts" },
-    { "type": "create_markdown", "name": "expense-log.md", "content": "# ...", "parentFolderName": "Receipts" }
+    { "type": "create_markdown", "name": "expense-log.md", "content": "# ...", "parentFolderName": "Receipts" },
+    { "type": "archive_document", "documentId": "I-20260604-AB3C", "parentFolderName": "Quotes & Invoices" }
   ]
 }
 Use actions when Jaryd asks you to save, file, organize, or write notes/reports into the vault.
-parentFolderName must match an existing folder (see vault tree). Omit parentFolderName only for top-level folders.
+- archive_document: snapshot a live Q-/E-/I- from the register (accurate totals/lines). Use after sending quotes or when filing paperwork.
+- create_markdown: free-form notes (receipt logs, GST summaries). Never invent dollar amounts for documents — use archive_document instead.
+parentFolderName must match an existing folder (see vault tree). Default quotes/invoices to "Quotes & Invoices".
 actions can be [] if no files should be created.
 `.trim();
 
@@ -67,8 +78,17 @@ export async function POST(req: Request) {
       });
     }
 
-    const flat = await listFileNodes();
+    const [flat, docRows] = await Promise.all([
+      listFileNodes(),
+      fetchDocumentsForBookkeeper(80),
+    ]);
     const vaultTree = formatVaultTreeForPrompt(flat);
+    const docRegister = formatDocumentsRegisterForPrompt(docRows);
+    const gaps = analyzePaperworkGaps(docRows);
+
+    const mentionedIds = extractDocumentIdsFromMessages(parsed.data.messages);
+    const detailDocs = await loadDocumentsForBookkeeper(mentionedIds);
+    const docDetails = detailDocs.map(formatDocumentDetailForPrompt).join("\n\n");
 
     const contextBlocks: string[] = [];
     const visionUrls: string[] = [];
@@ -89,11 +109,18 @@ export async function POST(req: Request) {
     const system = [
       ADMIN_BOOKKEEPER_SYSTEM,
       "",
+      "Live quotes / estimates / invoices (admin tool — source of truth for AR):",
+      docRegister,
+      gaps.length
+        ? `\nPaperwork alerts (proactively mention in reply when relevant):\n${gaps.map((g) => `- ${g}`).join("\n")}`
+        : "",
+      "",
       "Vault folders (use exact parentFolderName when creating files):",
       vaultTree,
       "",
       JSON_HINT,
-      contextBlocks.length ? `Open file context:\n${contextBlocks.join("\n")}` : "",
+      docDetails ? `Referenced documents (full detail):\n${docDetails}` : "",
+      contextBlocks.length ? `Open vault file context:\n${contextBlocks.join("\n")}` : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -135,6 +162,8 @@ export async function POST(req: Request) {
       const lines = executed.map((e) =>
         e.type === "create_folder"
           ? `📁 Folder **${e.name}**`
+          : e.type === "archive_document"
+          ? `📋 Archived **${e.documentId ?? e.name}** → ${e.name}`
           : `📄 Note **${e.name}**`
       );
       reply += `\n\n---\n**Saved to vault:**\n${lines.join("\n")}`;

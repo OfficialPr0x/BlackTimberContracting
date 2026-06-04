@@ -7,6 +7,11 @@ import {
   listFileNodes,
 } from "./repository";
 import type { FileNodeRow } from "./types";
+import { loadQuote } from "../quotes";
+import {
+  documentToVaultMarkdown,
+  vaultArchiveFileName,
+} from "../bookkeeper-documents";
 
 export const BookkeeperVaultAction = z.discriminatedUnion("type", [
   z.object({
@@ -21,6 +26,12 @@ export const BookkeeperVaultAction = z.discriminatedUnion("type", [
     content: z.string().max(120_000),
     parentFolderName: z.string().max(255).optional(),
   }),
+  z.object({
+    type: z.literal("archive_document"),
+    /** Q-/E-/I- ID from admin quotes — server writes accurate snapshot to vault */
+    documentId: z.string().regex(/^[QEI]-\d{8}-[A-Z0-9]{4}$/),
+    parentFolderName: z.string().max(255).optional(),
+  }),
 ]);
 
 export type BookkeeperVaultAction = z.infer<typeof BookkeeperVaultAction>;
@@ -33,10 +44,11 @@ export const BookkeeperResponseSchema = z.object({
 export type BookkeeperResponse = z.infer<typeof BookkeeperResponseSchema>;
 
 export interface ExecutedVaultAction {
-  type: "create_folder" | "create_markdown";
+  type: "create_folder" | "create_markdown" | "archive_document";
   id: string;
   name: string;
   parentFolderName?: string;
+  documentId?: string;
 }
 
 function resolveParentId(
@@ -73,6 +85,30 @@ export async function executeVaultActions(
           id: node.id,
           name: node.name,
           parentFolderName: action.parentFolderName,
+        });
+      } else if (action.type === "archive_document") {
+        const doc = await loadQuote(action.documentId);
+        if (!doc) {
+          errors.push(`Document ${action.documentId} not found`);
+          continue;
+        }
+        const archiveParentId = resolveParentId(
+          flat,
+          action.parentFolderName ?? "Quotes & Invoices",
+          defaultParentId
+        );
+        const name = vaultArchiveFileName(doc);
+        const node = await createMarkdownFile(
+          name,
+          archiveParentId,
+          documentToVaultMarkdown(doc)
+        );
+        executed.push({
+          type: "archive_document",
+          id: node.id,
+          name: node.name,
+          parentFolderName: action.parentFolderName ?? "Quotes & Invoices",
+          documentId: doc.id,
         });
       } else {
         const node = await createMarkdownFile(action.name, parentId, action.content);

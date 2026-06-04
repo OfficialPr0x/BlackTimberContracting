@@ -252,7 +252,9 @@ export default function BookkeeperWorkspace() {
       const created = body.created as Array<{ type: string; id: string; name: string }> | undefined;
       if (created?.length) {
         await refreshTree();
-        const md = created.find((c) => c.type === "create_markdown");
+        const md = created.find(
+          (c) => c.type === "create_markdown" || c.type === "archive_document"
+        );
         if (md) await loadFile(md.id);
         else {
           const folder = created.find((c) => c.type === "create_folder");
@@ -458,7 +460,7 @@ export default function BookkeeperWorkspace() {
       <div className="shrink-0 px-3 py-2 border-b border-brand-border">
         <p className="text-[10px] font-mono uppercase tracking-widest text-brand-gold">AI Bookkeeper</p>
         <p className="text-[10px] text-brand-gray mt-0.5">
-          {file ? `Context: ${file.name}` : "Can create folders & notes in vault"}
+          {file ? `Context: ${file.name}` : "Synced with quotes · invoices · vault"}
         </p>
       </div>
       <div
@@ -467,8 +469,8 @@ export default function BookkeeperWorkspace() {
       >
         {messages.length === 0 ? (
           <p className="text-xs text-brand-gray">
-            Ask to categorize a receipt, log expenses, or say &quot;save this as a note in
-            Receipts&quot; — I&apos;ll create files in your vault.
+            Ask about open invoices, match deposits, or say &quot;archive I-20260604-AB3C to
+            Quotes &amp; Invoices&quot; — I see your live quote register and can file vault notes.
           </p>
         ) : (
           messages.map((m, i) => (
@@ -523,7 +525,7 @@ export default function BookkeeperWorkspace() {
           Files · Notes · Receipts
         </h1>
         <p className="text-[10px] sm:text-xs text-brand-gray mt-0.5">
-          Chat can create folders & markdown notes · open receipts for vision
+          Live Q-/E-/I- register · vault filing · receipt vision
         </p>
       </header>
 

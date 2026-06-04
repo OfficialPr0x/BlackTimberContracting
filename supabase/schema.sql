@@ -309,8 +309,8 @@ begin
     nullif(p_document->'customer'->>'jobSiteAddress', ''),
     (p_document->'project'->>'type')::public.project_type,
     p_document->'project'->>'scopeSummary',
-    (p_document->'project'->>'lengthFt')::numeric,
-    (p_document->'project'->>'widthFt')::numeric,
+    nullif(trim(p_document->'project'->>'lengthFt'), '')::numeric,
+    nullif(trim(p_document->'project'->>'widthFt'), '')::numeric,
     nullif(p_document->'project'->>'material', ''),
     nullif(p_document->'project'->>'notes', ''),
     (p_document->>'taxMode')::public.tax_mode,
@@ -374,7 +374,7 @@ begin
       coalesce((v_line->>'uom')::public.line_uom, 'EA'),
       coalesce((v_line->>'unitPriceCAD')::numeric, 0),
       coalesce((v_line->>'source')::public.line_source, 'other'),
-      (v_line->>'leadTimeDays')::integer,
+      nullif(trim(v_line->>'leadTimeDays'), '')::integer,
       nullif(v_line->>'notes', '')
     );
     v_sort := v_sort + 1;
@@ -578,6 +578,9 @@ grant usage on schema public to postgres, anon, authenticated, service_role;
 grant all on all tables in schema public to service_role;
 grant all on all sequences in schema public to service_role;
 grant execute on all functions in schema public to service_role;
+grant execute on function public.upsert_document(jsonb, jsonb) to service_role;
+grant execute on function public.get_document(text) to service_role;
+grant execute on function public.list_documents(integer) to service_role;
 
 -- Revoke anon/authenticated table access (belt + suspenders with RLS)
 revoke all on public.leads from anon, authenticated;

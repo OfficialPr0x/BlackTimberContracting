@@ -6,15 +6,36 @@
 import "server-only";
 import { AiError } from "@/lib/openrouter/errors";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { sanitizeDocumentForRpc } from "./sanitize-document";
 import type { AdminQuoteSaved } from "./schemas";
 
-function supabaseError(context: string, err: { message?: string } | null): never {
+function supabaseHint(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("does not exist") || m.includes("could not find the function")) {
+    return " Run the full supabase/schema.sql file in Supabase → SQL Editor.";
+  }
+  if (m.includes("permission denied") || m.includes("not authorized")) {
+    return " Use SUPABASE_SECRET_KEY (sb_secret_…), not the publishable key.";
+  }
+  if (m.includes("invalid input value for enum")) {
+    return " Schema may be out of date — re-run supabase/schema.sql.";
+  }
+  if (m.includes("invalid input syntax for type numeric")) {
+    return " A numeric field was invalid — try saving again after this deploy.";
+  }
+  return "";
+}
+
+function supabaseError(
+  context: string,
+  err: { message?: string; code?: string; hint?: string } | null
+): never {
+  const detail = err?.message ?? "unknown";
   throw new AiError({
     code: "internal",
     status: 500,
-    clientMessage:
-      "Could not save to the database. Check Supabase env vars on Vercel and that you ran supabase/schema.sql.",
-    message: `${context}: ${err?.message ?? "unknown"}`,
+    clientMessage: `Database ${context} failed: ${detail}${supabaseHint(detail)}`,
+    message: `${context} [${err?.code ?? "—"}]: ${detail}${err?.hint ? ` (${err.hint})` : ""}`,
     cause: err,
   });
 }
@@ -32,9 +53,10 @@ export async function saveQuoteSupabase(record: AdminQuoteSaved): Promise<AdminQ
     });
   }
 
+  const payload = sanitizeDocumentForRpc(record);
   const { error } = await sb.rpc("upsert_document", {
-    p_document: record,
-    p_lines: record.lines,
+    p_document: payload,
+    p_lines: payload.lines,
   });
 
   if (error) supabaseError("upsert_document", error);

@@ -21,6 +21,13 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { AiError } from "@/lib/openrouter/errors";
+import { isSupabaseConfigured } from "@/lib/supabase/server";
+import {
+  loadQuoteSupabase,
+  listQuotesSupabase,
+  saveQuoteSupabase,
+} from "./quotes-supabase";
 import type {
   AdminDocumentType,
   AdminQuoteInput,
@@ -30,7 +37,11 @@ import type {
   AdminQuoteLine,
 } from "./schemas";
 
-const QUOTES_FILE = process.env.QUOTES_LOG_FILE ?? "./.data/quotes.jsonl";
+// Vercel serverless FS is read-only except /tmp — default JSONL path must not
+// be ./.data on production or save returns 500.
+const QUOTES_FILE =
+  process.env.QUOTES_LOG_FILE ??
+  (process.env.VERCEL ? "/tmp/quotes.jsonl" : "./.data/quotes.jsonl");
 const GST_RATE = 0.05;
 const PST_RATE = 0.07;
 
@@ -200,7 +211,25 @@ export async function saveQuote(
     createdBy,
   };
 
-  await appendLine(record);
+  if (isSupabaseConfigured()) {
+    return saveQuoteSupabase(record);
+  }
+
+  try {
+    await appendLine(record);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    throw new AiError({
+      code: "internal",
+      status: 500,
+      clientMessage:
+        process.env.VERCEL && !isSupabaseConfigured()
+          ? "Cannot save on Vercel without Supabase. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in project settings."
+          : "Could not write quote file. Check server logs.",
+      message: `Quote file write failed (${code ?? "unknown"}): ${(err as Error).message}`,
+      cause: err,
+    });
+  }
   return record;
 }
 
@@ -210,6 +239,9 @@ export async function saveQuote(
  * if it ever crosses tens of thousands, swap for an indexed store.
  */
 export async function loadQuote(id: string): Promise<AdminQuoteSaved | null> {
+  if (isSupabaseConfigured()) {
+    return loadQuoteSupabase(id);
+  }
   const all = await readAll();
   let latest: AdminQuoteSaved | null = null;
   for (const r of all) {
@@ -223,6 +255,9 @@ export async function loadQuote(id: string): Promise<AdminQuoteSaved | null> {
  * Optional `limit` for the recent-quotes sidebar.
  */
 export async function listQuotes(limit?: number): Promise<AdminQuoteSaved[]> {
+  if (isSupabaseConfigured()) {
+    return listQuotesSupabase(limit ?? 50);
+  }
   const all = await readAll();
   // Collapse to latest-per-id.
   const byId = new Map<string, AdminQuoteSaved>();

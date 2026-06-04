@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Mobile admin nav — respect iOS home indicator */
+.safe-area-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
 @theme {
   --color-brand-gold: #c5a880;
   --color-brand-gold-hover: #b39359;

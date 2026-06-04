@@ -40,6 +40,8 @@ export const LIMITS = {
   explain:  { limit: 20, windowSec: 60 },   // 20/min — cheap explanatory text
   parse:    { limit: 15, windowSec: 60 },   // 15/min — Cmd+K admin form fill
   chat:     { limit: 30, windowSec: 60 },   // 30/min for streaming chat
+  admin_chat: { limit: 40, windowSec: 60 }, // admin bookkeeper + concierge
+  transcribe: { limit: 20, windowSec: 60 }, // Whisper voice
   leads:    { limit: 5,  windowSec: 300 },  // 5/5min per IP — strict (anti-spam)
 } as const satisfies Record<string, { limit: number; windowSec: number }>;
 

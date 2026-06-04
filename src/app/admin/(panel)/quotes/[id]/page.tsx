@@ -6,9 +6,7 @@
  */
 
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
-import { getAdminSession } from "@/lib/admin/session";
 import { loadQuote } from "@/lib/admin/quotes";
 import { getBusinessProfile } from "@/lib/business-config";
 import { idToDocType } from "@/components/admin/BrandedDocument";
@@ -36,10 +34,7 @@ interface PageProps {
 }
 
 export default async function QuoteDetailPage({ params }: PageProps) {
-  const session = await getAdminSession();
   const { id } = await params;
-  if (!session) redirect(`/admin/login?from=/admin/quotes/${id}`);
-
   const business = getBusinessProfile();
   const quote = await loadQuote(id);
 

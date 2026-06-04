@@ -43,6 +43,7 @@ export const LIMITS = {
   admin_chat: { limit: 40, windowSec: 60 }, // admin bookkeeper + concierge
   transcribe: { limit: 20, windowSec: 60 }, // Whisper voice
   leads:    { limit: 5,  windowSec: 300 },  // 5/5min per IP — strict (anti-spam)
+  prospect_search: { limit: 4, windowSec: 300 }, // admin B2B lead gen — expensive
 } as const satisfies Record<string, { limit: number; windowSec: number }>;
 
 export type LimitName = keyof typeof LIMITS;

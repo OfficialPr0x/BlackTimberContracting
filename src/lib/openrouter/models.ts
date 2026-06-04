@@ -16,6 +16,7 @@ export type ModelTask =
   | "explain"    // narrate the cost-calculator math, sanity-check the range
   | "parse"      // Cmd+K admin form fill — fast + vision for screenshots
   | "chat"       // streaming concierge chat
+  | "prospect"   // B2B lead gen — web search + vision portfolio matching
   | "fallback";  // last-ditch cheap/fast model when primaries 5xx
 
 export const MODELS: Record<ModelTask, string> = {
@@ -29,6 +30,10 @@ export const MODELS: Record<ModelTask, string> = {
   // vs GPT-5's 5–10s first-token latency, which is the difference between
   // "feels alive" and "feels broken" for a streaming chat widget.
   chat:     process.env.OPENROUTER_MODEL_CHAT     ?? "anthropic/claude-sonnet-4.5",
+  prospect:
+    process.env.OPENROUTER_MODEL_PROSPECT ??
+    process.env.OPENROUTER_MODEL_INTEL ??
+    "perplexity/sonar-pro",
   fallback: process.env.OPENROUTER_MODEL_FALLBACK ?? "google/gemini-2.5-flash",
 };
 
@@ -48,5 +53,11 @@ export const FALLBACK_CHAIN: Record<ModelTask, string[]> = {
     process.env.OPENROUTER_MODEL_PARSE_FALLBACK ?? "anthropic/claude-3.5-haiku",
   ],
   chat:    [MODELS.chat,    "openai/gpt-5",                MODELS.fallback],
+  prospect: [
+    MODELS.prospect,
+    "google/gemini-2.5-pro",
+    "perplexity/sonar-reasoning-pro",
+    MODELS.fallback,
+  ],
   fallback:[MODELS.fallback],
 };

@@ -118,7 +118,7 @@ export default function AdminShell({ children, banner }: AdminShellProps) {
           className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-brand-border bg-brand-charcoal/95 backdrop-blur-md safe-area-pb"
           aria-label="Admin navigation"
         >
-          <ul className="grid grid-cols-5 gap-0">
+          <ul className="grid grid-cols-6 gap-0">
             {ADMIN_NAV.map((item) => {
               const active = isAdminNavActive(pathname, item.href);
               const Icon = item.icon;

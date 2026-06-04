@@ -601,5 +601,8 @@ revoke all on public.rate_limit_events from anon, authenticated;
 --   SUPABASE_SECRET_KEY=sb_secret_...   (or legacy SUPABASE_SERVICE_ROLE_KEY)
 --   Do NOT expose secret keys to the browser.
 --
--- Also run: supabase/files-schema.sql (admin file vault + btc-admin-files bucket)
+-- Also run:
+--   supabase/bookkeeping-vault.sql (file vault)
+--   supabase/esign-schema.sql (e-sign)
+--   supabase/prospect-leads-schema.sql (admin B2B lead gen)
 -- =============================================================================

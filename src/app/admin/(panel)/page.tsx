@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  FileText,
-  Calculator,
-  MessageCircle,
-  ArrowRight,
-  AlertCircle,
-} from "lucide-react";
+import { ArrowRight, AlertCircle } from "lucide-react";
 import { listQuotes } from "@/lib/admin/quotes";
 import { getSupabaseConfigStatus } from "@/lib/supabase/server";
 import { ADMIN_NAV } from "@/lib/admin/nav";
@@ -81,12 +75,7 @@ export default async function AdminDashboardPage() {
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {tools.map((item) => {
-            const Icon =
-              item.href === "/admin/quotes"
-                ? FileText
-                : item.href === "/admin/bookkeeper"
-                ? Calculator
-                : MessageCircle;
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}

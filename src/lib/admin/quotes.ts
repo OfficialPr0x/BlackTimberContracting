@@ -22,7 +22,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { AiError } from "@/lib/openrouter/errors";
-import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { getSupabaseServerConfig, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   loadQuoteSupabase,
   listQuotesSupabase,
@@ -150,12 +150,16 @@ export async function saveQuote(
   }
 
   if (process.env.VERCEL) {
+    const { url, serviceRoleKey } = getSupabaseServerConfig();
+    const missing = [
+      !url ? "SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)" : null,
+      !serviceRoleKey ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+    ].filter(Boolean);
     throw new AiError({
       code: "internal",
       status: 503,
-      clientMessage:
-        "Saving on Vercel requires Supabase. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in project settings, run supabase/schema.sql, then try again.",
-      message: "Quote persistence disabled on Vercel without Supabase (ephemeral /tmp is not shared across requests).",
+      clientMessage: `Saving on Vercel requires Supabase. Add ${missing.join(" and ")} in Vercel → Environment Variables (service_role from Supabase → Settings → API), run supabase/schema.sql, then redeploy.`,
+      message: `Quote persistence disabled on Vercel without Supabase. Missing: ${missing.join(", ")}`,
     });
   }
 

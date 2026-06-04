@@ -12,6 +12,7 @@ import {
   documentToVaultMarkdown,
   vaultArchiveFileName,
 } from "../bookkeeper-documents";
+import { createEsignFromQuote } from "@/lib/esign/create-from-source";
 
 export const BookkeeperVaultAction = z.discriminatedUnion("type", [
   z.object({
@@ -32,6 +33,14 @@ export const BookkeeperVaultAction = z.discriminatedUnion("type", [
     documentId: z.string().regex(/^[QEI]-\d{8}-[A-Z0-9]{4}$/),
     parentFolderName: z.string().max(255).optional(),
   }),
+  z.object({
+    type: z.literal("create_esign"),
+    documentId: z.string().regex(/^[QEI]-\d{8}-[A-Z0-9]{4}$/),
+    sendNow: z.boolean().optional(),
+    signerEmail: z.string().email().max(200).optional(),
+    signerName: z.string().max(120).optional(),
+    signerMessage: z.string().max(2000).optional(),
+  }),
 ]);
 
 export type BookkeeperVaultAction = z.infer<typeof BookkeeperVaultAction>;
@@ -44,11 +53,12 @@ export const BookkeeperResponseSchema = z.object({
 export type BookkeeperResponse = z.infer<typeof BookkeeperResponseSchema>;
 
 export interface ExecutedVaultAction {
-  type: "create_folder" | "create_markdown" | "archive_document";
+  type: "create_folder" | "create_markdown" | "archive_document" | "create_esign";
   id: string;
   name: string;
   parentFolderName?: string;
   documentId?: string;
+  signUrl?: string;
 }
 
 function resolveParentId(
@@ -76,7 +86,29 @@ export async function executeVaultActions(
 
   for (const action of actions) {
     try {
-      const parentId = resolveParentId(flat, action.parentFolderName, defaultParentId);
+      if (action.type === "create_esign") {
+        const { envelope } = await createEsignFromQuote({
+          documentId: action.documentId,
+          sendNow: action.sendNow ?? true,
+          signerEmail: action.signerEmail,
+          signerName: action.signerName,
+          signerMessage: action.signerMessage,
+        });
+        executed.push({
+          type: "create_esign",
+          id: envelope.id,
+          name: envelope.title,
+          documentId: action.documentId,
+          signUrl: envelope.signUrl,
+        });
+        continue;
+      }
+
+      const parentId = resolveParentId(
+        flat,
+        "parentFolderName" in action ? action.parentFolderName : undefined,
+        defaultParentId
+      );
 
       if (action.type === "create_folder") {
         const node = await createFolder(action.name, parentId);

@@ -367,10 +367,11 @@ Filing conventions (vault + quotes):
   - Subcontractors: sub invoices and COIs.
   - When Jaryd says "file this quote" or "archive I-…", use archive_document (not guessed markdown).
 
-Vault actions (JSON):
+Vault & e-sign actions (JSON):
   - create_folder: { type, name, parentFolderName? }
   - create_markdown: { type, name, content, parentFolderName? } — logs, GST summaries, receipt write-ups
   - archive_document: { type, documentId, parentFolderName? } — accurate quote/invoice snapshot
+  - create_esign: { type, documentId, sendNow?, signerEmail?, signerName?, signerMessage? } — client signing portal + Resend emails
   - parentFolderName must match the vault tree (e.g. Receipts, Quotes & Invoices).
 `.trim();
 
@@ -400,6 +401,6 @@ export const PROMPT_VERSIONS = {
   concierge: "concierge.v2",
   admin_suggest: "admin_suggest.v2",
   admin_parse: "admin_parse.v3",
-  admin_bookkeeper: "admin_bookkeeper.v2",
+  admin_bookkeeper: "admin_bookkeeper.v3",
   admin_concierge: "admin_concierge.v1",
 } as const;

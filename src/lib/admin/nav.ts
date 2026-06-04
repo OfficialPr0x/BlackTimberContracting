@@ -4,6 +4,7 @@ import {
   FileText,
   Calculator,
   MessageCircle,
+  PenLine,
 } from "lucide-react";
 
 export interface AdminNavItem {
@@ -35,6 +36,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     shortLabel: "Books",
     description: "Vault + live quotes/invoices, receipts, AI filing",
     icon: Calculator,
+  },
+  {
+    href: "/admin/esign",
+    label: "E-Sign",
+    shortLabel: "Sign",
+    description: "Send & track client signatures · Resend emails",
+    icon: PenLine,
   },
   {
     href: "/admin/concierge",

@@ -50,10 +50,12 @@ Return ONE JSON object only:
   "actions": [
     { "type": "create_folder", "name": "2026 Q1", "parentFolderName": "Receipts" },
     { "type": "create_markdown", "name": "expense-log.md", "content": "# ...", "parentFolderName": "Receipts" },
-    { "type": "archive_document", "documentId": "I-20260604-AB3C", "parentFolderName": "Quotes & Invoices" }
+    { "type": "archive_document", "documentId": "I-20260604-AB3C", "parentFolderName": "Quotes & Invoices" },
+    { "type": "create_esign", "documentId": "Q-20260604-AB3C", "sendNow": true, "signerMessage": "Please review and sign." }
   ]
 }
 Use actions when Jaryd asks you to save, file, organize, or write notes/reports into the vault.
+- create_esign: send a quote/estimate/invoice for client e-signature (needs customer email on quote or signerEmail). Track in Admin → E-Sign.
 - archive_document: snapshot a live Q-/E-/I- from the register (accurate totals/lines). Use after sending quotes or when filing paperwork.
 - create_markdown: free-form notes (receipt logs, GST summaries). Never invent dollar amounts for documents — use archive_document instead.
 parentFolderName must match an existing folder (see vault tree). Default quotes/invoices to "Quotes & Invoices".
@@ -164,6 +166,8 @@ export async function POST(req: Request) {
           ? `📁 Folder **${e.name}**`
           : e.type === "archive_document"
           ? `📋 Archived **${e.documentId ?? e.name}** → ${e.name}`
+          : e.type === "create_esign"
+          ? `✍️ E-sign sent **${e.documentId ?? e.name}**${e.signUrl ? ` — [portal link](${e.signUrl})` : ""}`
           : `📄 Note **${e.name}**`
       );
       reply += `\n\n---\n**Saved to vault:**\n${lines.join("\n")}`;

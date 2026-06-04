@@ -253,19 +253,47 @@ export type AdminQuoteSuggestOutput = z.infer<typeof AdminQuoteSuggestOutput>;
  * filled in (so it doesn't overwrite a phone number with a blank if the user
  * only mentioned the address).
  */
-export const AdminQuoteParseInput = z.object({
-  text: z.string().min(8).max(4000),
-  /** Snapshot of the form fields the user has already filled. */
-  currentForm: z
-    .object({
-      customer: AdminQuoteCustomer.partial().optional(),
-      project: AdminQuoteProject.partial({ scopeSummary: true, type: true }).optional(),
-      taxMode: AdminQuoteTaxMode.optional(),
-      documentType: AdminDocumentType.optional(),
-      lineCount: z.number().int().min(0).max(80).optional(),
-    })
-    .optional(),
+export const AdminQuoteParseImage = z.object({
+  /** data:image/... base64 or https URL */
+  url: z
+    .string()
+    .min(20)
+    .max(8_000_000)
+    .refine(
+      (u) => u.startsWith("data:image/") || /^https?:\/\//i.test(u),
+      "Image must be a data URL or https URL"
+    ),
+  caption: z.string().max(120).optional(),
 });
+export type AdminQuoteParseImage = z.infer<typeof AdminQuoteParseImage>;
+
+export const AdminQuoteParseInput = z
+  .object({
+    text: z.string().max(4000).default(""),
+    /** Screenshots, text threads, supplier quotes, etc. — vision extracts into the form. */
+    images: z.array(AdminQuoteParseImage).max(6).optional().default([]),
+    /** Snapshot of the form fields the user has already filled. */
+    currentForm: z
+      .object({
+        customer: AdminQuoteCustomer.partial().optional(),
+        project: AdminQuoteProject.partial({ scopeSummary: true, type: true }).optional(),
+        taxMode: AdminQuoteTaxMode.optional(),
+        documentType: AdminDocumentType.optional(),
+        lineCount: z.number().int().min(0).max(80).optional(),
+      })
+      .optional(),
+  })
+  .superRefine((val, ctx) => {
+    const hasText = val.text.trim().length >= 8;
+    const hasImages = (val.images?.length ?? 0) > 0;
+    if (!hasText && !hasImages) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Add a description (8+ characters) or at least one image.",
+        path: ["text"],
+      });
+    }
+  });
 export type AdminQuoteParseInput = z.infer<typeof AdminQuoteParseInput>;
 
 /**

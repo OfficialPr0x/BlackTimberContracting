@@ -21,7 +21,7 @@
  */
 
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
-import { chatJSON, type ChatMessage } from "@/lib/openrouter/client";
+import { chatJSON, type ChatMessage, type ContentPart } from "@/lib/openrouter/client";
 import { requireAdminRoute } from "@/lib/admin/session";
 import { AdminQuoteParseInput, AdminQuoteParseOutput } from "@/lib/admin/schemas";
 import { ADMIN_PARSE_PROMPT } from "@/lib/openrouter/prompts";
@@ -42,6 +42,7 @@ Optional fields — omit if unknown:
   freightCAD: number
   paymentTerms: string
 If the user gave explicit $/sqft or $/LF prices, use those as unitPriceCAD. CAD only.
+When images are attached, OCR/read them for customer info, dimensions, SKUs, and prices.
 `.trim();
 
 export async function POST(req: Request) {
@@ -65,15 +66,23 @@ export async function POST(req: Request) {
       throw new AiError({
         code: "invalid_input",
         status: 400,
-        clientMessage: "Type at least 8 characters describing the job.",
+        clientMessage:
+          "Add a short description (8+ characters) or attach at least one screenshot.",
         message: parsed.error.message,
       });
     }
     const input = parsed.data;
+    const images = input.images ?? [];
+    const description =
+      input.text.trim() ||
+      "(No typed description — extract all useful details from the attached image(s).)";
 
-    const userMessage = [
+    const userText = [
       "Free-form description of the job:",
-      input.text,
+      description,
+      images.length > 0
+        ? `\nAttached images: ${images.length} (read each for names, phones, addresses, dimensions, products, prices).`
+        : "",
       "",
       input.currentForm
         ? `Current form snapshot (DON'T overwrite these unless you have explicit new info):\n${JSON.stringify(input.currentForm, null, 2)}`
@@ -82,20 +91,27 @@ export async function POST(req: Request) {
       PARSE_JSON_HINT,
     ].join("\n");
 
+    const userContent: ContentPart[] = [{ type: "text", text: userText }];
+    for (const img of images) {
+      userContent.push({
+        type: "image_url",
+        image_url: { url: img.url, detail: "high" },
+      });
+    }
+
     const messages: ChatMessage[] = [
       { role: "system", content: ADMIN_PARSE_PROMPT },
-      { role: "user", content: userMessage },
+      { role: "user", content: userContent },
     ];
 
-    // json_object + Zod validation — works on Gemini Flash & Claude Haiku.
-    // json_schema strict mode was 502ing in production.
+    // json_object + Zod validation — Gemini Flash & Claude Haiku support vision.
     const result = await chatJSON({
       task: "parse",
       schema: AdminQuoteParseOutput,
       schemaName: "AdminQuoteParseOutput",
       messages,
       temperature: 0.1,
-      timeoutMs: 14_000,
+      timeoutMs: images.length > 0 ? 28_000 : 14_000,
       jsonObject: true,
       maxModels: 2,
     });

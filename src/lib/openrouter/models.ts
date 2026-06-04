@@ -14,7 +14,7 @@ export type ModelTask =
   | "intel"      // address → grounded site brief (web access needed)
   | "sketch"     // canvas PNG → interpret what the client drew (vision needed)
   | "explain"    // narrate the cost-calculator math, sanity-check the range
-  | "parse"      // Cmd+K admin form fill — must be fast (no GPT-5 primary)
+  | "parse"      // Cmd+K admin form fill — fast + vision for screenshots
   | "chat"       // streaming concierge chat
   | "fallback";  // last-ditch cheap/fast model when primaries 5xx
 
@@ -23,7 +23,7 @@ export const MODELS: Record<ModelTask, string> = {
   intel:    process.env.OPENROUTER_MODEL_INTEL    ?? "perplexity/sonar-reasoning-pro",
   sketch:   process.env.OPENROUTER_MODEL_SKETCH   ?? "google/gemini-2.5-pro",
   explain:  process.env.OPENROUTER_MODEL_EXPLAIN  ?? "openai/gpt-5",
-  // Cmd+K parse: fast models with reliable json_object mode (see client.ts).
+  // Cmd+K parse: vision + json_object (screenshots, text threads).
   parse:    process.env.OPENROUTER_MODEL_PARSE    ?? "google/gemini-2.5-flash",
   // Chat defaults to Claude Sonnet — it starts emitting tokens within ~1s
   // vs GPT-5's 5–10s first-token latency, which is the difference between

@@ -6,27 +6,31 @@
  * UX:
  *   - Globally listens for Cmd/Ctrl+K. Opens a centered modal with a big
  *     textarea. The user types or pastes a free-form description of the
- *     job and hits Submit (or Cmd+Enter).
- *   - We POST the text to /api/admin/quotes/parse with a snapshot of the
- *     fields the user has already filled (so the AI doesn't clobber them).
+ *     job and/or attaches screenshots (texts, supplier quotes, etc.).
+ *   - We POST to /api/admin/quotes/parse with optional vision images.
  *   - The model returns a partial AdminQuoteParseOutput. We hand it to the
  *     parent's `onApply` callback, which merges it into the form state.
- *
- * Why a separate component (not inlined in QuoteBuilder):
- *   - Keeps the giant builder file from getting any longer.
- *   - The keyboard listener and modal state are self-contained — the
- *     parent just plumbs in `currentForm` and `onApply`.
- *
- * The "applied summary" toast is rendered inside the modal then auto-
- * dismisses; if you want a global toast system later, swap it.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, X, Loader, AlertCircle, ArrowRight } from "lucide-react";
+import {
+  Sparkles,
+  X,
+  Loader,
+  AlertCircle,
+  ArrowRight,
+  ImagePlus,
+  Trash2,
+} from "lucide-react";
 import type {
   AdminQuoteParseInput,
   AdminQuoteParseOutput,
 } from "@/lib/admin/schemas";
+import {
+  filesToParseAttachments,
+  MAX_PARSE_IMAGES,
+  type ParseImageAttachment,
+} from "@/lib/admin/parse-images";
 
 interface CmdKProps {
   /** Snapshot of the form so the AI can avoid clobbering filled fields. */
@@ -38,21 +42,22 @@ interface CmdKProps {
 export default function CmdK({ currentForm, onApply }: CmdKProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [images, setImages] = useState<ParseImageAttachment[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AdminQuoteParseOutput | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper: open the palette while resetting any toast state from a previous
-  // session. Centralizing this keeps the open-state transitions out of an
-  // effect (where setState would cascade-render), per react-hooks rules.
+  const canSubmit =
+    !pending && (text.trim().length >= 8 || images.length > 0);
+
   const openPalette = useCallback(() => {
     setError(null);
     setResult(null);
     setOpen(true);
   }, []);
 
-  // Global Cmd/Ctrl+K listener. Also Esc to close while open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey;
@@ -60,8 +65,6 @@ export default function CmdK({ currentForm, onApply }: CmdKProps) {
         e.preventDefault();
         setOpen((prev) => {
           if (prev) return false;
-          // Opening: also clear stale toasts. Cheap to call inside the
-          // updater since these setters are stable and won't re-trigger.
           setError(null);
           setResult(null);
           return true;
@@ -77,17 +80,53 @@ export default function CmdK({ currentForm, onApply }: CmdKProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Autofocus the textarea when the modal opens. Pure DOM side-effect,
-  // safe to keep in an effect.
   useEffect(() => {
     if (open && textareaRef.current) {
       textareaRef.current.focus();
     }
   }, [open]);
 
+  const addFiles = useCallback(
+    async (files: FileList | File[]) => {
+      setError(null);
+      try {
+        const added = await filesToParseAttachments(Array.from(files), images.length);
+        if (added.length > 0) {
+          setImages((prev) => [...prev, ...added].slice(0, MAX_PARSE_IMAGES));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not add image.");
+      }
+    },
+    [images.length]
+  );
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) void addFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const onPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) imageFiles.push(f);
+      }
+    }
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    void addFiles(imageFiles);
+  };
+
+  const removeImage = (id: string) => {
+    setImages((prev) => prev.filter((img) => img.id !== id));
+  };
+
   const submit = useCallback(async () => {
-    const t = text.trim();
-    if (t.length < 8 || pending) return;
+    if (!canSubmit) return;
     setPending(true);
     setError(null);
     setResult(null);
@@ -95,35 +134,39 @@ export default function CmdK({ currentForm, onApply }: CmdKProps) {
       const res = await fetch("/api/admin/quotes/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: t, currentForm }),
+        body: JSON.stringify({
+          text: text.trim(),
+          images: images.map((img) => ({
+            url: img.url,
+            caption: img.name,
+          })),
+          currentForm,
+        }),
       });
       const body = await res.json();
       if (!res.ok) {
         throw new Error(body?.error?.message ?? `Parse failed (${res.status})`);
       }
       setResult(body as AdminQuoteParseOutput);
-      // Apply immediately — user can still see the summary in the modal.
       onApply(body as AdminQuoteParseOutput);
       setText("");
+      setImages([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't parse that.");
     } finally {
       setPending(false);
     }
-  }, [text, pending, currentForm, onApply]);
+  }, [canSubmit, text, images, currentForm, onApply]);
 
-  // Cmd/Ctrl+Enter inside the textarea submits.
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      submit();
+      void submit();
     }
   };
 
   return (
     <>
-      {/* Floating launcher button so users without keyboard discoverability */}
-      {/* still find the feature. Hidden on print. */}
       <button
         type="button"
         onClick={openPalette}
@@ -137,25 +180,24 @@ export default function CmdK({ currentForm, onApply }: CmdKProps) {
         </kbd>
       </button>
 
-      {/* Modal */}
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] px-4 print:hidden"
+          className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4 print:hidden"
           onClick={() => !pending && setOpen(false)}
           role="dialog"
           aria-modal="true"
         >
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <div
-            className="relative w-full max-w-2xl rounded-xl bg-brand-charcoal border border-brand-gold/30 shadow-2xl overflow-hidden"
+            className="relative w-full max-w-2xl rounded-xl bg-brand-charcoal border border-brand-gold/30 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
+            onPaste={onPaste}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-brand-border bg-brand-black/40">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-brand-border bg-brand-black/40 shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-brand-gold" />
                 <span className="font-mono text-[11px] uppercase tracking-widest text-brand-gold">
-                  Talk to AI · fills the form
+                  Talk to AI · text + screenshots
                 </span>
               </div>
               <button
@@ -168,47 +210,95 @@ export default function CmdK({ currentForm, onApply }: CmdKProps) {
               </button>
             </div>
 
-            {/* Textarea */}
-            <div className="p-5">
+            <div className="p-5 overflow-y-auto">
               <textarea
                 ref={textareaRef}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
-                rows={6}
+                rows={5}
                 placeholder={
-                  "Describe what you're doing in plain English. e.g.,\n" +
-                  '"Quoting flooring for John Smith at 250 Mountain View Rd, Fernie. ' +
-                  "1200 sqft luxury vinyl plank installed, plus 14 lf of bullnose stair " +
-                  "treads. Existing carpet to be removed.\""
+                  "Describe the job, or paste context. You can also attach screenshots:\n" +
+                  "text threads, supplier quotes, handwritten notes, product labels…"
                 }
-                className="w-full bg-brand-black border border-brand-border focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/40 outline-none rounded-lg px-3.5 py-3 text-sm text-white placeholder:text-brand-gray/60 resize-y min-h-[140px]"
+                className="w-full bg-brand-black border border-brand-border focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/40 outline-none rounded-lg px-3.5 py-3 text-sm text-white placeholder:text-brand-gray/60 resize-y min-h-[120px]"
                 disabled={pending}
               />
 
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={onFileChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={pending || images.length >= MAX_PARSE_IMAGES}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold disabled:opacity-50"
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                  Add images
+                </button>
+                <span className="text-[10px] font-mono text-brand-gray">
+                  Paste screenshots with Ctrl+V · up to {MAX_PARSE_IMAGES} images
+                </span>
+              </div>
+
+              {images.length > 0 ? (
+                <ul className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {images.map((img) => (
+                    <li
+                      key={img.id}
+                      className="relative group rounded-lg overflow-hidden border border-brand-border bg-brand-black aspect-square"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt={img.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(img.id)}
+                        className="absolute top-1 right-1 p-1 rounded bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label={`Remove ${img.name}`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      <span className="absolute bottom-0 inset-x-0 px-1 py-0.5 text-[8px] font-mono text-white/90 bg-black/60 truncate">
+                        {img.name}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
               <div className="flex items-center justify-between mt-3 gap-3">
                 <p className="text-[10px] font-mono text-brand-gray">
-                  Grounded in your supplier primer. Won&apos;t overwrite fields you&apos;ve already filled.
+                  Vision reads screenshots for names, sizes, SKUs, and prices.
                 </p>
                 <button
                   type="button"
-                  onClick={submit}
-                  disabled={pending || text.trim().length < 8}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-gold hover:bg-brand-gold-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-black text-xs font-mono uppercase tracking-widest font-bold transition-colors"
+                  onClick={() => void submit()}
+                  disabled={!canSubmit}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-gold hover:bg-brand-gold-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-black text-xs font-mono uppercase tracking-widest font-bold transition-colors shrink-0"
                 >
                   {pending ? (
                     <Loader className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <ArrowRight className="w-3.5 h-3.5" />
                   )}
-                  {pending ? "Thinking..." : "Apply to form"}
+                  {pending ? "Reading…" : "Apply to form"}
                   <kbd className="ml-1 px-1.5 py-0.5 rounded bg-brand-black/15 text-[9px] font-mono">
                     ⌘↵
                   </kbd>
                 </button>
               </div>
 
-              {/* Error */}
               {error ? (
                 <div className="mt-4 flex items-start gap-2 p-3 rounded-md border border-red-500/40 bg-red-500/10 text-xs text-red-300">
                   <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -216,7 +306,6 @@ export default function CmdK({ currentForm, onApply }: CmdKProps) {
                 </div>
               ) : null}
 
-              {/* Applied summary + uncertainties */}
               {result ? (
                 <div className="mt-4 rounded-md border border-brand-gold/30 bg-brand-gold/5 p-3.5 space-y-2">
                   <p className="text-xs text-white font-medium">

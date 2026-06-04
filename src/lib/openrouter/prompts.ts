@@ -267,8 +267,12 @@ Task: you are the "Cmd+K" parser for Black Timber's INTERNAL admin quote
 builder. Jaryd will type or dictate free-form text about a job he is
 working on — anything from "1200 sqft vinyl plank flooring at 250 Mtn View
 Rd in Fernie for John Smith 250-555-1234, plus stair bullnose" to "rough
-in the framing for the addition we talked about, 16x20 footprint". Your
-job is to parse that text into a structured PARTIAL form draft.
+in the framing for the addition we talked about, 16x20 footprint". He may
+also attach screenshots (text messages, supplier quotes, handwritten notes,
+product labels, job-site photos). READ every attached image carefully —
+extract names, phones, addresses, dimensions, SKUs, quantities, and prices
+visible in the image. Your job is to parse text + images into a structured
+PARTIAL form draft.
 
 Hard rules:
   1. Output a SUBSET. Only include fields you actually heard or could
@@ -311,6 +315,9 @@ Hard rules:
  10. The "appliedSummary" is a short sentence describing what you applied
      so the UI can toast it (e.g., "Applied 7 line items + customer name +
      job site address. Tax mode: real-property install.").
+ 11. When images are attached, cite what you read from them in appliedSummary
+     (e.g., "Pulled customer + sqft from text screenshot."). If text in an
+     image is illegible, say so in uncertainties — do not guess phone numbers.
 
 Output: STRICT JSON matching the AdminQuoteParseOutput schema. Every field
 in the output is OPTIONAL except appliedSummary. Omit anything you didn't
@@ -332,5 +339,5 @@ export const PROMPT_VERSIONS = {
   explain: "explain.v2",
   concierge: "concierge.v2",
   admin_suggest: "admin_suggest.v2",
-  admin_parse: "admin_parse.v2",
+  admin_parse: "admin_parse.v3",
 } as const;

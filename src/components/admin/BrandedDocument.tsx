@@ -124,6 +124,7 @@ export default function BrandedDocument({
 }) {
   const docType = quote.documentType ?? idToDocType(quote.id);
   const copy = copyForDoc(docType);
+  const displayId = quote.id.includes("PREVIEW") ? "Draft (not saved yet)" : quote.id;
 
   return (
     <article className="btc-document relative bg-white text-[#1a1816] mx-auto shadow-2xl shadow-black/50 print:shadow-none print:rounded-none rounded-lg overflow-hidden">
@@ -179,7 +180,7 @@ export default function BrandedDocument({
             >
               {copy.headline}
             </p>
-            <p className="font-mono text-[13px] text-white/90 mt-2">{quote.id}</p>
+            <p className="font-mono text-[13px] text-white/90 mt-2">{displayId}</p>
             <dl className="mt-4 text-[11px] grid grid-cols-[auto_auto] gap-x-3 gap-y-1 justify-end text-white/80">
               <dt className="text-white/50 text-right">Issued</dt>
               <dd className="font-mono text-right text-white">{fmtDate(quote.updatedAt)}</dd>

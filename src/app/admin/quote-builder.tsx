@@ -23,7 +23,7 @@
  * src/lib/openrouter/supplier-knowledge.ts.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -31,13 +31,22 @@ import {
   Sparkles,
   Save,
   Printer,
-  ExternalLink,
   Loader,
   AlertCircle,
   FileText,
   Calculator,
   Receipt,
+  FileDown,
+  Eye,
 } from "lucide-react";
+import {
+  buildPreviewDocument,
+  buildSavePayload,
+  deriveScopeSummary,
+  PREVIEW_STORAGE_KEY,
+  validateDraftForSave,
+  type LineDraft,
+} from "@/lib/admin/draft-helpers";
 import type {
   AdminDocumentType,
   AdminQuoteCustomer,
@@ -60,17 +69,6 @@ interface RecentQuoteSummary {
 
 interface QuoteBuilderProps {
   initialRecentQuotes: RecentQuoteSummary[];
-}
-
-interface LineDraft {
-  id: string;
-  description: string;
-  quantity: number;
-  uom: QuoteLineUom;
-  unitPriceCAD: number;
-  source: QuoteLineSource;
-  leadTimeDays?: number;
-  notes?: string;
 }
 
 const UOM_OPTIONS: QuoteLineUom[] = ["EA", "LF", "SQFT", "BX", "BG", "HR", "DAY", "LOT"];
@@ -308,60 +306,65 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
     }
   }, [customer.jobSiteAddress, project, suggesting]);
 
-  // ---- Save ---------------------------------------------------------------
+  const fillScopeFromLines = useCallback(() => {
+    const derived = deriveScopeSummary(project, lines, documentType);
+    setProject((p) => ({ ...p, scopeSummary: derived }));
+  }, [documentType, lines, project]);
+
+  const baseDraft = useMemo(
+    () => ({
+      documentType,
+      customer,
+      project,
+      lines,
+      taxMode,
+      freightCAD,
+      validUntil,
+      internalNotes: internalNotes.trim() || undefined,
+      paymentTerms,
+      paymentInstructions,
+      savedQuoteId,
+    }),
+    [
+      customer,
+      documentType,
+      freightCAD,
+      internalNotes,
+      lines,
+      paymentInstructions,
+      paymentTerms,
+      project,
+      savedQuoteId,
+      taxMode,
+      validUntil,
+    ]
+  );
+
+  // ---- Save (scope auto-filled from line items if blank) --------------------
   const handleSave = useCallback(
-    async (status: "draft" | "sent") => {
-      if (saving) return;
-      if (!customer.name.trim()) {
-        setError("Customer name is required.");
-        return;
-      }
-      if (!project.scopeSummary.trim()) {
-        setError("Project scope summary is required.");
-        return;
-      }
-      if (lines.length === 0) {
-        setError("Add at least one line item.");
-        return;
+    async (status: "draft" | "sent"): Promise<string | null> => {
+      if (saving) return null;
+      const check = validateDraftForSave(customer, lines);
+      if (!check.ok) {
+        setError(check.message);
+        return null;
       }
       setError(null);
       setSaving(true);
       try {
+        const scopeSummary = deriveScopeSummary(project, lines, documentType);
+        setProject((p) => ({ ...p, scopeSummary }));
+
         const res = await fetch("/api/admin/quotes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: savedQuoteId ?? undefined,
-            documentType,
-            customer: {
-              ...customer,
-              email: customer.email?.trim() || undefined,
-              phone: customer.phone?.trim() || undefined,
-              billingAddress: customer.billingAddress?.trim() || undefined,
-              jobSiteAddress: customer.jobSiteAddress?.trim() || undefined,
-            },
-            project: {
-              ...project,
-              material: project.material?.trim() || undefined,
-              notes: project.notes?.trim() || undefined,
-            },
-            lines,
-            taxMode,
-            freightCAD,
-            validUntil,
-            status,
-            internalNotes: internalNotes.trim() || undefined,
-            // Only send invoice-specific fields when the doc is an invoice;
-            // otherwise the schema's optional fields stay omitted.
-            paymentTerms:
-              documentType === "invoice" && paymentTerms.trim()
-                ? paymentTerms.trim()
-                : undefined,
-            paymentInstructions:
-              documentType === "invoice" && paymentInstructions.trim()
-                ? paymentInstructions.trim()
-                : undefined,
-          }),
+          body: JSON.stringify(
+            buildSavePayload({
+              ...baseDraft,
+              project: { ...project, scopeSummary },
+              status,
+            })
+          ),
         });
         const body = await res.json();
         if (!res.ok) {
@@ -382,28 +385,52 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
           ].slice(0, 25);
         });
         router.refresh();
+        return body.id as string;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to save.");
+        return null;
       } finally {
         setSaving(false);
       }
     },
-    [
-      customer,
-      documentType,
-      freightCAD,
-      internalNotes,
-      lines,
-      paymentInstructions,
-      paymentTerms,
-      project,
-      router,
-      saving,
-      savedQuoteId,
-      taxMode,
-      validUntil,
-    ]
+    [baseDraft, customer, documentType, lines, project, router, saving]
   );
+
+  const handlePreviewPdf = useCallback(() => {
+    const check = validateDraftForSave(customer, lines);
+    if (!check.ok) {
+      setError(check.message);
+      return;
+    }
+    setError(null);
+    const doc = buildPreviewDocument({
+      ...baseDraft,
+      status: "draft",
+    });
+    try {
+      sessionStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(doc));
+      window.open("/admin/preview", "_blank", "noopener,noreferrer");
+    } catch {
+      setError("Could not open preview. Try saving first, then Open PDF.");
+    }
+  }, [baseDraft, customer, lines]);
+
+  const handleSaveAndOpenPdf = useCallback(async () => {
+    const id = await handleSave("draft");
+    if (id) window.open(`/admin/quotes/${id}`, "_blank", "noopener,noreferrer");
+  }, [handleSave]);
+
+  // Ctrl+S / Cmd+S quick save
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        void handleSave("draft");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleSave]);
 
   // ---- Cmd+K apply --------------------------------------------------------
   // Merges the AI's partial parse into our state. Rules:
@@ -680,14 +707,27 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
               />
             </Field>
           </div>
-          <Field label="Scope summary" required>
+          <Field label="Scope summary">
             <textarea
               value={project.scopeSummary}
               onChange={(e) => setProject({ ...project, scopeSummary: e.target.value })}
               className={`${inputCls} min-h-[88px] font-sans`}
-              placeholder="e.g., 16x12 cedar deck attached to existing house, 36-inch railings, two helical piles, two steps to grade. Job site is in Fernie."
-              required
+              placeholder="Optional — leave blank and we auto-build from your line items when you save or preview PDF."
             />
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                type="button"
+                onClick={fillScopeFromLines}
+                className="text-[10px] font-mono uppercase tracking-widest text-brand-gold hover:text-brand-gold-hover border border-brand-gold/40 rounded px-2.5 py-1"
+              >
+                Fill from line items
+              </button>
+              {!project.scopeSummary.trim() && lines.some((l) => l.description.trim()) ? (
+                <span className="text-[10px] text-brand-gray self-center">
+                  Will auto-fill on save
+                </span>
+              ) : null}
+            </div>
           </Field>
           <div className="flex flex-wrap gap-2 pt-1">
             <button
@@ -970,47 +1010,62 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
           </div>
         ) : null}
 
-        {/* ---- Action bar ---- */}
-        <div className="flex flex-wrap gap-2 sticky bottom-0 -mx-5 px-5 py-3 bg-brand-black/85 backdrop-blur border-t border-brand-border">
-          <button
-            type="button"
-            onClick={() => handleSave("draft")}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-charcoal hover:bg-brand-panel border border-brand-border text-sm font-mono uppercase tracking-widest text-white transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            {savedQuoteId ? "Update draft" : "Save draft"}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSave("sent")}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-brand-black text-sm font-mono uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            {sentLabel}
-          </button>
-          {savedQuoteId ? (
-            <>
-              <a
-                href={`/admin/quotes/${savedQuoteId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-brand-border hover:border-brand-gold text-sm font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Open print view
-              </a>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-brand-border hover:border-brand-gold text-sm font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print this draft
-              </button>
-            </>
-          ) : null}
+        {/* ---- Action bar — save & branded PDF ---- */}
+        <div className="sticky bottom-0 -mx-5 px-5 py-4 bg-brand-black/90 backdrop-blur border-t border-brand-border space-y-3">
+          <p className="text-[10px] font-mono text-brand-gray uppercase tracking-widest">
+            Branded PDF uses your logo + gold theme · Ctrl+S quick save
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleSave("draft")}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-charcoal hover:bg-brand-panel border border-brand-border text-sm font-mono uppercase tracking-widest text-white transition-colors disabled:opacity-50"
+            >
+              {saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {savedQuoteId ? "Update draft" : "Quick save"}
+            </button>
+            <button
+              type="button"
+              onClick={handlePreviewPdf}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold/50 text-brand-gold text-sm font-mono uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Preview PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveAndOpenPdf()}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-brand-black text-sm font-mono uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              Save &amp; open PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave("sent")}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-brand-border hover:border-brand-gold text-sm font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {sentLabel}
+            </button>
+            {savedQuoteId ? (
+              <>
+                <a
+                  href={`/admin/quotes/${savedQuoteId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-brand-gold/40 hover:border-brand-gold text-sm font-mono uppercase tracking-widest text-brand-gold transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Open saved PDF
+                </a>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 

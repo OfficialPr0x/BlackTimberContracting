@@ -112,6 +112,7 @@ export default function BookkeeperWorkspace() {
   const [chatInput, setChatInput] = useState("");
   const [chatPending, setChatPending] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const refreshTree = useCallback(async () => {
     const res = await fetch("/api/admin/files");
@@ -126,6 +127,11 @@ export default function BookkeeperWorkspace() {
       .catch((e) => setError(e instanceof Error ? e.message : "Load failed"))
       .finally(() => setLoading(false));
   }, [refreshTree]);
+
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, chatPending]);
 
   const loadFile = useCallback(async (id: string) => {
     const res = await fetch(`/api/admin/files/${id}`);
@@ -220,7 +226,7 @@ export default function BookkeeperWorkspace() {
     if (!text || chatPending) return;
     setChatInput("");
     const convo: ChatMsg[] = [...messages, { role: "user", content: text }];
-    setMessages([...convo, { role: "assistant", content: "" }]);
+    setMessages(convo);
     setChatPending(true);
     setError(null);
 
@@ -229,38 +235,46 @@ export default function BookkeeperWorkspace() {
       const res = await fetch("/api/admin/bookkeeper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: convo, contextFileIds }),
+        body: JSON.stringify({
+          messages: convo,
+          contextFileIds,
+          selectedFolderId: selectedFolderId,
+        }),
       });
-      if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
         throw new Error(body?.error?.message ?? `Chat failed (${res.status})`);
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let accum = "";
-      let primed = false;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        accum += primed ? chunk : chunk.replace(/^\s+/, "");
-        primed = true;
-        setMessages((prev) => {
-          const next = [...prev];
-          next[next.length - 1] = { role: "assistant", content: accum };
-          return next;
-        });
+
+      const reply = body.reply as string;
+      setMessages([...convo, { role: "assistant", content: reply }]);
+
+      const created = body.created as Array<{ type: string; id: string; name: string }> | undefined;
+      if (created?.length) {
+        await refreshTree();
+        const md = created.find((c) => c.type === "create_markdown");
+        if (md) await loadFile(md.id);
+        else {
+          const folder = created.find((c) => c.type === "create_folder");
+          if (folder) {
+            setSelectedFolderId(folder.id);
+            setSelectedId(folder.id);
+            setExpanded((prev) => new Set(prev).add(folder.id));
+          }
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chat failed");
-      setMessages((prev) => prev.slice(0, -1));
+      setMessages(convo);
     } finally {
       setChatPending(false);
     }
   };
 
+  const panelShell = "flex flex-col h-full min-h-0 border border-brand-border rounded-xl bg-brand-charcoal/50 overflow-hidden";
+
   const fileTreePanel = (
-    <div className="flex flex-col h-full min-h-[280px] border border-brand-border rounded-xl bg-brand-charcoal/50 overflow-hidden">
+    <div className={panelShell}>
       <div className="flex items-center gap-1 p-2 border-b border-brand-border flex-wrap">
         <button
           type="button"
@@ -347,7 +361,7 @@ export default function BookkeeperWorkspace() {
   );
 
   const editorPanel = (
-    <div className="flex flex-col h-full min-h-[320px] border border-brand-border rounded-xl bg-brand-charcoal/40 overflow-hidden">
+    <div className={`${panelShell} bg-brand-charcoal/40`}>
       {!file ? (
         <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-brand-gray">
           Select a file from the tree, or upload a receipt / photo.
@@ -440,17 +454,21 @@ export default function BookkeeperWorkspace() {
   );
 
   const chatPanel = (
-    <div className="flex flex-col h-full min-h-[280px] border border-brand-border rounded-xl bg-brand-charcoal/50 overflow-hidden">
-      <div className="px-3 py-2 border-b border-brand-border">
+    <div className={panelShell}>
+      <div className="shrink-0 px-3 py-2 border-b border-brand-border">
         <p className="text-[10px] font-mono uppercase tracking-widest text-brand-gold">AI Bookkeeper</p>
         <p className="text-[10px] text-brand-gray mt-0.5">
-          {file ? `Using context: ${file.name}` : "Select a receipt or note for context"}
+          {file ? `Context: ${file.name}` : "Can create folders & notes in vault"}
         </p>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[160px]">
+      <div
+        ref={chatScrollRef}
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-3"
+      >
         {messages.length === 0 ? (
           <p className="text-xs text-brand-gray">
-            Ask about GST, expenses, or what a receipt means. Open a receipt image first for vision.
+            Ask to categorize a receipt, log expenses, or say &quot;save this as a note in
+            Receipts&quot; — I&apos;ll create files in your vault.
           </p>
         ) : (
           messages.map((m, i) => (
@@ -458,20 +476,24 @@ export default function BookkeeperWorkspace() {
               key={i}
               className={`text-xs leading-relaxed rounded-lg px-2.5 py-2 ${
                 m.role === "user"
-                  ? "bg-brand-gold/15 text-white ml-4"
-                  : "bg-brand-panel text-brand-gray mr-4"
+                  ? "bg-brand-gold/15 text-white ml-2 sm:ml-4"
+                  : "bg-brand-panel text-brand-gray mr-2 sm:mr-4"
               }`}
             >
               {m.role === "assistant" && m.content ? (
                 <Markdown>{m.content}</Markdown>
+              ) : m.role === "user" ? (
+                <span className="text-white whitespace-pre-wrap">{m.content}</span>
               ) : (
-                m.content || (chatPending ? "…" : "")
+                <span className="inline-flex items-center gap-2 text-brand-gray">
+                  <Loader className="w-3 h-3 animate-spin" /> Thinking…
+                </span>
               )}
             </div>
           ))
         )}
       </div>
-      <div className="p-2 border-t border-brand-border flex gap-2">
+      <div className="shrink-0 p-2 border-t border-brand-border flex gap-2 bg-brand-charcoal/80">
         <input
           value={chatInput}
           onChange={(e) => setChatInput(e.target.value)}
@@ -492,27 +514,27 @@ export default function BookkeeperWorkspace() {
   );
 
   return (
-    <div className="space-y-3 -mx-1">
-      <header>
+    <div className="flex flex-col flex-1 min-h-0 h-full px-4 py-4 lg:px-6 lg:py-5">
+      <header className="shrink-0 mb-3">
         <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brand-gold">
           Bookkeeper IDE
         </p>
-        <h1 className="text-xl sm:text-2xl font-medium text-white mt-0.5">
+        <h1 className="text-lg sm:text-xl font-medium text-white mt-0.5">
           Files · Notes · Receipts
         </h1>
-        <p className="text-xs text-brand-gray mt-1">
-          Upload receipts & photos · Markdown notes · PDF & Excel viewer · AI grounded on open files
+        <p className="text-[10px] sm:text-xs text-brand-gray mt-0.5">
+          Chat can create folders & markdown notes · open receipts for vision
         </p>
       </header>
 
       {error ? (
-        <p className="text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+        <p className="shrink-0 text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-2">
           {error}
         </p>
       ) : null}
 
       {/* Mobile tabs */}
-      <div className="lg:hidden flex gap-1 p-1 rounded-xl bg-brand-panel border border-brand-border">
+      <div className="shrink-0 lg:hidden flex gap-1 p-1 rounded-xl bg-brand-panel border border-brand-border mb-2">
         {(
           [
             ["files", PanelLeft, "Files"],
@@ -534,13 +556,13 @@ export default function BookkeeperWorkspace() {
         ))}
       </div>
 
-      <div className="hidden lg:grid lg:grid-cols-12 gap-3 min-h-[calc(100dvh-14rem)]">
-        <div className="lg:col-span-3">{fileTreePanel}</div>
-        <div className="lg:col-span-5">{editorPanel}</div>
-        <div className="lg:col-span-4">{chatPanel}</div>
+      <div className="hidden lg:grid lg:grid-cols-12 gap-3 flex-1 min-h-0 overflow-hidden">
+        <div className="lg:col-span-3 min-h-0 flex flex-col">{fileTreePanel}</div>
+        <div className="lg:col-span-5 min-h-0 flex flex-col">{editorPanel}</div>
+        <div className="lg:col-span-4 min-h-0 flex flex-col">{chatPanel}</div>
       </div>
 
-      <div className="lg:hidden min-h-[min(65dvh,640px)]">
+      <div className="lg:hidden flex-1 min-h-0 overflow-hidden">
         {mobilePane === "files" ? fileTreePanel : null}
         {mobilePane === "editor" ? editorPanel : null}
         {mobilePane === "chat" ? chatPanel : null}

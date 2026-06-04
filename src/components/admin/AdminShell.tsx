@@ -21,6 +21,7 @@ interface AdminShellProps {
 
 export default function AdminShell({ children, banner }: AdminShellProps) {
   const pathname = usePathname() ?? "/admin";
+  const isBookkeeper = pathname.startsWith("/admin/bookkeeper");
 
   return (
     <div className="min-h-[100dvh] bg-brand-black text-foreground flex flex-col lg:flex-row print:min-h-0">
@@ -102,7 +103,13 @@ export default function AdminShell({ children, banner }: AdminShellProps) {
 
         {banner ? <div className="px-4 pt-4 lg:px-8 lg:pt-6 max-w-6xl mx-auto w-full">{banner}</div> : null}
 
-        <main className="flex-1 overflow-y-auto pb-24 lg:pb-8 px-4 py-5 lg:px-8 lg:py-8 max-w-6xl mx-auto w-full">
+        <main
+          className={
+            isBookkeeper
+              ? "flex-1 flex flex-col min-h-0 overflow-hidden pb-20 lg:pb-4 px-0 py-0 lg:px-0 lg:py-0 w-full max-w-none"
+              : "flex-1 overflow-y-auto pb-24 lg:pb-8 px-4 py-5 lg:px-8 lg:py-8 max-w-6xl mx-auto w-full"
+          }
+        >
           {children}
         </main>
 

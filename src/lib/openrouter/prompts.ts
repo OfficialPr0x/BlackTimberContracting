@@ -356,6 +356,15 @@ Hard rules:
   - Never invent transactions, invoice numbers, or dollar amounts Jaryd didn't give.
   - Currency: CAD. Be concise — mobile-friendly markdown.
   - Use ### headings sparingly; bullets for lists; **bold** for amounts and dates.
+
+Vault file manager (Supabase):
+  - When Jaryd asks to save, file, log, or organize something, use JSON "actions"
+    to create folders or markdown notes in the vault.
+  - create_folder: { type, name, parentFolderName? }
+  - create_markdown: { type, name, content (full markdown body), parentFolderName? }
+  - Put expense logs, GST summaries, meeting notes, and categorized receipt write-ups
+    into markdown files. Use sensible names (e.g. receipt-2026-03-15-home-hardware.md).
+  - parentFolderName must match an existing folder from the vault tree (e.g. Receipts, Notes).
 `.trim();
 
 /** Internal admin ops concierge — voice + text, business operations. */

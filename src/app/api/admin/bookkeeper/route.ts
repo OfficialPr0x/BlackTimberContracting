@@ -1,12 +1,18 @@
 /**
- * POST /api/admin/bookkeeper — streaming AI bookkeeper (admin only).
+ * POST /api/admin/bookkeeper — AI bookkeeper with vault file/folder creation.
  */
 
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
-import { chatStream, type ChatMessage, type ContentPart } from "@/lib/openrouter/client";
+import { chatJSON, type ChatMessage, type ContentPart } from "@/lib/openrouter/client";
 import { ADMIN_BOOKKEEPER_SYSTEM } from "@/lib/openrouter/prompts";
 import { requireAdminRoute } from "@/lib/admin/session";
 import { getFileNode } from "@/lib/admin/files/repository";
+import {
+  BookkeeperResponseSchema,
+  executeVaultActions,
+  formatVaultTreeForPrompt,
+} from "@/lib/admin/files/bookkeeper-actions";
+import { listFileNodes } from "@/lib/admin/files/repository";
 import { checkRate } from "@/lib/rate-limit";
 import { z } from "zod";
 
@@ -24,9 +30,24 @@ const Input = z.object({
     )
     .min(1)
     .max(40),
-  /** Vault files to ground the reply (receipts, notes, spreadsheets metadata). */
   contextFileIds: z.array(z.string().uuid()).max(6).optional(),
+  /** Selected folder in the IDE — default parent for new files */
+  selectedFolderId: z.string().uuid().nullable().optional(),
 });
+
+const JSON_HINT = `
+Return ONE JSON object only:
+{
+  "reply": "markdown answer for Jaryd",
+  "actions": [
+    { "type": "create_folder", "name": "2026 Q1", "parentFolderName": "Receipts" },
+    { "type": "create_markdown", "name": "expense-log.md", "content": "# ...", "parentFolderName": "Receipts" }
+  ]
+}
+Use actions when Jaryd asks you to save, file, organize, or write notes/reports into the vault.
+parentFolderName must match an existing folder (see vault tree). Omit parentFolderName only for top-level folders.
+actions can be [] if no files should be created.
+`.trim();
 
 export async function POST(req: Request) {
   try {
@@ -46,6 +67,9 @@ export async function POST(req: Request) {
       });
     }
 
+    const flat = await listFileNodes();
+    const vaultTree = formatVaultTreeForPrompt(flat);
+
     const contextBlocks: string[] = [];
     const visionUrls: string[] = [];
 
@@ -54,22 +78,25 @@ export async function POST(req: Request) {
       if (!node) continue;
       if (node.mimeType?.startsWith("image/") && node.downloadUrl) {
         visionUrls.push(node.downloadUrl);
-        contextBlocks.push(`[Image file: ${node.name}]`);
+        contextBlocks.push(`[Image: ${node.name}]`);
       } else if (node.textContent) {
         contextBlocks.push(
-          `--- File: ${node.name} ---\n${node.textContent.slice(0, 24_000)}\n---`
-        );
-      } else {
-        contextBlocks.push(
-          `[Attached file: ${node.name}, type ${node.mimeType ?? "unknown"}, ${node.sizeBytes ?? 0} bytes]`
+          `--- ${node.name} ---\n${node.textContent.slice(0, 20_000)}\n---`
         );
       }
     }
 
-    const system =
-      contextBlocks.length > 0
-        ? `${ADMIN_BOOKKEEPER_SYSTEM}\n\nVault context:\n${contextBlocks.join("\n")}`
-        : ADMIN_BOOKKEEPER_SYSTEM;
+    const system = [
+      ADMIN_BOOKKEEPER_SYSTEM,
+      "",
+      "Vault folders (use exact parentFolderName when creating files):",
+      vaultTree,
+      "",
+      JSON_HINT,
+      contextBlocks.length ? `Open file context:\n${contextBlocks.join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const mapped = parsed.data.messages.map(
       (m) => ({ role: m.role, content: m.content }) as ChatMessage
@@ -87,17 +114,36 @@ export async function POST(req: Request) {
       }
     }
 
-    const messages: ChatMessage[] = [{ role: "system", content: system }, ...mapped];
-
-    const stream = await chatStream({ task: "chat", messages, temperature: 0.35 });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
-      },
+    const result = await chatJSON({
+      task: "parse",
+      schema: BookkeeperResponseSchema,
+      schemaName: "BookkeeperResponse",
+      messages: [{ role: "system", content: system }, ...mapped],
+      temperature: 0.35,
+      jsonObject: true,
+      timeoutMs: 28_000,
+      maxModels: 2,
     });
+
+    const { executed, errors } = await executeVaultActions(
+      result.actions,
+      parsed.data.selectedFolderId ?? null
+    );
+
+    let reply = result.reply;
+    if (executed.length > 0) {
+      const lines = executed.map((e) =>
+        e.type === "create_folder"
+          ? `📁 Folder **${e.name}**`
+          : `📄 Note **${e.name}**`
+      );
+      reply += `\n\n---\n**Saved to vault:**\n${lines.join("\n")}`;
+    }
+    if (errors.length > 0) {
+      reply += `\n\n*(Some vault actions failed: ${errors.join("; ")})*`;
+    }
+
+    return Response.json({ reply, created: executed, actionErrors: errors });
   } catch (err) {
     return errorResponse(err);
   }

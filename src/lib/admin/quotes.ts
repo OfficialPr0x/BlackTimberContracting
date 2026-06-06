@@ -24,6 +24,7 @@ import { randomBytes } from "node:crypto";
 import { AiError } from "@/lib/openrouter/errors";
 import { getSupabaseServerConfig, isSupabaseConfigured } from "@/lib/supabase/server";
 import {
+  deleteQuoteSupabase,
   loadQuoteSupabase,
   listQuotesSupabase,
   saveQuoteSupabase,
@@ -216,6 +217,28 @@ export async function listQuotes(limit?: number): Promise<AdminQuoteSaved[]> {
     b.updatedAt.localeCompare(a.updatedAt)
   );
   return typeof limit === "number" ? sorted.slice(0, limit) : sorted;
+}
+
+/** Delete a document permanently (Supabase or JSONL rewrite). */
+export async function deleteQuote(id: string): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await deleteQuoteSupabase(id);
+    return;
+  }
+
+  const abs = await quotesFilePath();
+  const all = await readAll();
+  const remaining = all.filter((r) => r.id !== id);
+  if (remaining.length === all.length) {
+    throw new AiError({
+      code: "invalid_input",
+      status: 404,
+      clientMessage: "Document not found.",
+    });
+  }
+  const lines = remaining.map((r) => JSON.stringify(r)).join("\n") + (remaining.length ? "\n" : "");
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.writeFile(abs, lines, "utf8");
 }
 
 async function readAll(): Promise<AdminQuoteSaved[]> {

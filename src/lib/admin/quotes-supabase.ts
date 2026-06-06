@@ -125,3 +125,21 @@ export async function listQuotesSupabase(limit = 50): Promise<AdminQuoteSaved[]>
     createdBy: "admin",
   }));
 }
+
+/** Permanently delete a document and its lines/revisions (cascade). */
+export async function deleteQuoteSupabase(id: string): Promise<boolean> {
+  const sb = getSupabaseAdmin();
+  if (!sb) return false;
+
+  const { error } = await sb.from("documents").delete().eq("id", id);
+  if (error) {
+    console.error("[delete document]", error.message);
+    throw new AiError({
+      code: "internal",
+      status: 500,
+      clientMessage: `Could not delete document: ${error.message}`,
+      message: error.message,
+    });
+  }
+  return true;
+}

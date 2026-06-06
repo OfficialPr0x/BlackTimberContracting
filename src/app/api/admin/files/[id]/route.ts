@@ -3,15 +3,22 @@ import { requireAdminRoute } from "@/lib/admin/session";
 import {
   deleteFileNode,
   getFileNode,
+  updateFileNodeMeta,
   updateMarkdownContent,
 } from "@/lib/admin/files/repository";
 import { z } from "zod";
 
 export const runtime = "nodejs";
 
-const PutBody = z.object({
-  content: z.string().max(500_000),
-});
+const PatchBody = z
+  .object({
+    content: z.string().max(500_000).optional(),
+    name: z.string().min(1).max(255).optional(),
+    parentId: z.string().uuid().nullable().optional(),
+  })
+  .refine((b) => b.content !== undefined || b.name !== undefined || b.parentId !== undefined, {
+    message: "Nothing to update.",
+  });
 
 export async function GET(
   _req: Request,
@@ -32,7 +39,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
+export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
@@ -42,21 +49,38 @@ export async function PUT(
 
     const { id } = await ctx.params;
     const json = await req.json().catch(() => null);
-    const parsed = PutBody.safeParse(json);
+    const parsed = PatchBody.safeParse(json);
     if (!parsed.success) {
       throw new AiError({
         code: "invalid_input",
         status: 400,
-        clientMessage: "Invalid content.",
+        clientMessage: "Invalid update.",
       });
     }
 
-    await updateMarkdownContent(id, parsed.data.content);
+    if (parsed.data.content !== undefined) {
+      await updateMarkdownContent(id, parsed.data.content);
+    }
+    if (parsed.data.name !== undefined || parsed.data.parentId !== undefined) {
+      await updateFileNodeMeta(id, {
+        name: parsed.data.name,
+        parentId: parsed.data.parentId,
+      });
+    }
+
     const node = await getFileNode(id);
     return Response.json(node);
   } catch (err) {
     return errorResponse(err);
   }
+}
+
+/** @deprecated Use PATCH */
+export async function PUT(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  return PATCH(req, ctx);
 }
 
 export async function DELETE(

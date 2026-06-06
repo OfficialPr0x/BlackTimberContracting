@@ -9,7 +9,17 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminQuotesPage() {
+export default async function AdminQuotesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  const params = await searchParams;
+  const editId =
+    typeof params.edit === "string" && /^[QEI]-\d{8}-[A-Z0-9]{4}$/.test(params.edit)
+      ? params.edit
+      : undefined;
+
   let recentQuotes: Awaited<ReturnType<typeof listQuotes>> = [];
   try {
     recentQuotes = await listQuotes(25);
@@ -27,10 +37,11 @@ export default async function AdminQuotesPage() {
           Quotes · Estimates · Invoices
         </h1>
         <p className="text-xs text-brand-gray mt-1">
-          Fernie HH grounded · Cmd+K Talk to AI · branded PDF
+          Edit saved docs · delete · Cmd+K · branded PDF
         </p>
       </header>
       <QuoteBuilder
+        editId={editId}
         initialRecentQuotes={recentQuotes.map((q) => ({
           id: q.id,
           customerName: q.customer.name,

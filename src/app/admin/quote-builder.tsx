@@ -38,11 +38,14 @@ import {
   Receipt,
   FileDown,
   Eye,
+  Pencil,
+  X,
 } from "lucide-react";
 import {
   buildPreviewDocument,
   buildSavePayload,
   deriveScopeSummary,
+  draftFromSavedQuote,
   PREVIEW_STORAGE_KEY,
   validateDraftForSave,
   type LineDraft,
@@ -71,7 +74,17 @@ interface RecentQuoteSummary {
 
 interface QuoteBuilderProps {
   initialRecentQuotes: RecentQuoteSummary[];
+  /** Open builder with an existing document loaded for edit */
+  editId?: string;
 }
+
+const DOC_STATUS_OPTIONS: AdminQuoteSaved["status"][] = [
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+  "paid",
+];
 
 const UOM_OPTIONS: QuoteLineUom[] = ["EA", "LF", "SQFT", "BX", "BG", "HR", "DAY", "LOT"];
 
@@ -191,7 +204,7 @@ function defaultValidUntil(documentType: AdminDocumentType = "quote"): string {
   return d.toISOString().slice(0, 10);
 }
 
-export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps) {
+export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuilderProps) {
   const router = useRouter();
 
   // ---- Form state ----------------------------------------------------------
@@ -222,6 +235,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
   // pre-fill them and switch to invoice without losing data.
   const [paymentTerms, setPaymentTerms] = useState<string>("Net 14");
   const [paymentInstructions, setPaymentInstructions] = useState<string>("");
+  const [documentStatus, setDocumentStatus] = useState<AdminQuoteSaved["status"]>("draft");
 
   // ---- UI state ------------------------------------------------------------
   const [suggesting, setSuggesting] = useState(false);
@@ -230,6 +244,94 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
   const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [recentQuotes, setRecentQuotes] = useState<RecentQuoteSummary[]>(initialRecentQuotes);
+  const [loadingEdit, setLoadingEdit] = useState(!!editId);
+
+  const applyQuoteToForm = useCallback((quote: AdminQuoteSaved) => {
+    const d = draftFromSavedQuote(quote);
+    setCustomer(d.customer);
+    setProject(d.project);
+    setLines(d.lines);
+    setTaxMode(d.taxMode);
+    setFreightCAD(d.freightCAD);
+    setDocumentType(d.documentType);
+    setValidUntil(d.validUntil);
+    setInternalNotes(d.internalNotes);
+    setPaymentTerms(d.paymentTerms);
+    setPaymentInstructions(d.paymentInstructions);
+    setDocumentStatus(d.status);
+    setSavedQuoteId(quote.id);
+    setError(null);
+  }, []);
+
+  const startNewDocument = useCallback(() => {
+    setCustomer({ name: "", email: "", phone: "", billingAddress: "", jobSiteAddress: "" });
+    setProject({ type: "deck", scopeSummary: "", lengthFt: undefined, widthFt: undefined });
+    setLines([emptyLine()]);
+    setTaxMode("real_property_install");
+    setFreightCAD(0);
+    setDocumentType("quote");
+    setValidUntil(defaultValidUntil("quote"));
+    setInternalNotes("");
+    setPaymentTerms("Net 14");
+    setPaymentInstructions("");
+    setDocumentStatus("draft");
+    setSavedQuoteId(null);
+    setError(null);
+    router.replace("/admin/quotes");
+  }, [router]);
+
+  const loadQuoteForEdit = useCallback(
+    async (id: string) => {
+      if (savedQuoteId === id && !loadingEdit) {
+        router.replace(`/admin/quotes?edit=${encodeURIComponent(id)}`, { scroll: false });
+        return;
+      }
+      setLoadingEdit(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/admin/quotes/${encodeURIComponent(id)}`);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body?.error?.message ?? "Could not load document");
+        applyQuoteToForm(body as AdminQuoteSaved);
+        router.replace(`/admin/quotes?edit=${encodeURIComponent(id)}`, { scroll: false });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Load failed");
+      } finally {
+        setLoadingEdit(false);
+      }
+    },
+    [applyQuoteToForm, loadingEdit, router, savedQuoteId]
+  );
+
+  const deleteDocument = useCallback(
+    async (id: string) => {
+      if (
+        !confirm(
+          `Delete ${id} permanently? This removes the document and any synced vault archives.`
+        )
+      ) {
+        return;
+      }
+      setError(null);
+      try {
+        const res = await fetch(`/api/admin/quotes/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error?.message ?? "Delete failed");
+        setRecentQuotes((prev) => prev.filter((q) => q.id !== id));
+        if (savedQuoteId === id) startNewDocument();
+        router.refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Delete failed");
+      }
+    },
+    [router, savedQuoteId, startNewDocument]
+  );
+
+  useEffect(() => {
+    if (editId) void loadQuoteForEdit(editId);
+  }, [editId, loadQuoteForEdit]);
 
   // ---- Live totals (UX only — server is source of truth) -------------------
   const totals = useMemo(() => {
@@ -326,9 +428,11 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
       paymentTerms,
       paymentInstructions,
       savedQuoteId,
+      status: documentStatus,
     }),
     [
       customer,
+      documentStatus,
       documentType,
       freightCAD,
       internalNotes,
@@ -344,7 +448,8 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
 
   // ---- Save (scope auto-filled from line items if blank) --------------------
   const handleSave = useCallback(
-    async (status: "draft" | "sent"): Promise<string | null> => {
+    async (statusOverride?: AdminQuoteSaved["status"]): Promise<string | null> => {
+      const status = statusOverride ?? documentStatus;
       if (saving) return null;
       const check = validateDraftForSave(customer, lines);
       if (!check.ok) {
@@ -374,6 +479,8 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
         }
         cacheSavedDocument(body as AdminQuoteSaved);
         setSavedQuoteId(body.id);
+        setDocumentStatus(body.status as AdminQuoteSaved["status"]);
+        router.replace(`/admin/quotes?edit=${encodeURIComponent(body.id)}`, { scroll: false });
         setRecentQuotes((prev) => {
           const filtered = prev.filter((q) => q.id !== body.id);
           return [
@@ -396,7 +503,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
         setSaving(false);
       }
     },
-    [baseDraft, customer, documentType, lines, project, router, saving]
+    [baseDraft, customer, documentStatus, documentType, lines, project, router, saving]
   );
 
   const handlePreviewPdf = useCallback(() => {
@@ -419,7 +526,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
   }, [baseDraft, customer, lines]);
 
   const handleSaveAndOpenPdf = useCallback(async () => {
-    const id = await handleSave("draft");
+    const id = await handleSave();
     if (id) window.open(`/admin/quotes/${id}`, "_blank", "noopener,noreferrer");
   }, [handleSave]);
 
@@ -428,7 +535,7 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
-        void handleSave("draft");
+        void handleSave();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -539,10 +646,39 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
       ? "Save & mark sent"
       : "Save & mark sent";
 
+  const editingLocked = !!savedQuoteId;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       {/* ====================================================== Form ===== */}
       <div className="space-y-6">
+        {loadingEdit ? (
+          <div className="flex items-center gap-2 p-3 rounded-lg border border-brand-border bg-brand-charcoal/40 text-sm text-brand-gray">
+            <Loader className="w-4 h-4 animate-spin text-brand-gold" />
+            Loading document…
+          </div>
+        ) : null}
+
+        {savedQuoteId ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-brand-gold/40 bg-brand-gold/10">
+            <div className="flex items-center gap-2 min-w-0">
+              <Pencil className="w-4 h-4 text-brand-gold shrink-0" />
+              <span className="text-sm text-white truncate">
+                Editing <span className="font-mono text-brand-gold">{savedQuoteId}</span>
+              </span>
+              <StatusPill status={documentStatus} />
+            </div>
+            <button
+              type="button"
+              onClick={startNewDocument}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold"
+            >
+              <X className="w-3 h-3" />
+              New document
+            </button>
+          </div>
+        ) : null}
+
         {/* ---- Document type tab bar ---- */}
         <div className="flex flex-wrap items-stretch gap-2 p-1.5 rounded-xl border border-brand-border bg-brand-charcoal/40">
           {DOCUMENT_TYPE_OPTIONS.map((opt) => {
@@ -552,10 +688,10 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
               <button
                 key={opt.value}
                 type="button"
+                disabled={editingLocked && !active}
                 onClick={() => {
+                  if (editingLocked) return;
                   setDocumentType(opt.value);
-                  // If the validity date is still a default, snap it to the
-                  // new doc type's default. Don't blow away custom dates.
                   setValidUntil((cur) =>
                     cur === defaultValidUntil("quote") || cur === defaultValidUntil("invoice")
                       ? defaultValidUntil(opt.value)
@@ -563,9 +699,12 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
                   );
                 }}
                 aria-pressed={active}
+                title={editingLocked && !active ? "Document type is fixed after save" : undefined}
                 className={`flex-1 min-w-[140px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-left transition-colors border ${
                   active
                     ? "bg-brand-gold/15 border-brand-gold text-brand-gold"
+                    : editingLocked
+                    ? "bg-transparent border-transparent text-brand-gray/40 cursor-not-allowed"
                     : "bg-transparent border-transparent text-brand-gray hover:text-white hover:bg-brand-black/30"
                 }`}
               >
@@ -931,6 +1070,19 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
                 className={`${inputCls} font-mono`}
               />
             </Field>
+            <Field label="Status">
+              <select
+                value={documentStatus}
+                onChange={(e) => setDocumentStatus(e.target.value as AdminQuoteSaved["status"])}
+                className={inputCls}
+              >
+                {DOC_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Internal notes">
               <input
                 type="text"
@@ -1021,12 +1173,12 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void handleSave("draft")}
+              onClick={() => void handleSave()}
               disabled={saving}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-charcoal hover:bg-brand-panel border border-brand-border text-sm font-mono uppercase tracking-widest text-white transition-colors disabled:opacity-50"
             >
               {saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              {savedQuoteId ? "Update draft" : "Quick save"}
+              {savedQuoteId ? "Update" : "Quick save"}
             </button>
             <button
               type="button"
@@ -1076,33 +1228,62 @@ export default function QuoteBuilder({ initialRecentQuotes }: QuoteBuilderProps)
       <aside className="space-y-3">
         <div>
           <h2 className="font-mono text-[10px] uppercase tracking-widest text-brand-gray mb-2">
-            Recent quotes
+            Saved documents
           </h2>
           <div className="border border-brand-border rounded-lg divide-y divide-brand-border/60 max-h-[70vh] overflow-y-auto">
             {recentQuotes.length === 0 ? (
               <p className="p-4 text-xs text-brand-gray">
-                No quotes yet. Build one and hit save.
+                No documents yet. Build one and hit save.
               </p>
             ) : (
-              recentQuotes.map((q) => (
-                <a
-                  key={q.id}
-                  href={`/admin/quotes/${q.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block px-3 py-2.5 hover:bg-brand-charcoal/60 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-brand-gold">{q.id}</span>
-                    <StatusPill status={q.status} />
+              recentQuotes.map((q) => {
+                const isActive = savedQuoteId === q.id;
+                return (
+                  <div
+                    key={q.id}
+                    className={`px-3 py-2.5 transition-colors ${
+                      isActive ? "bg-brand-gold/10" : "hover:bg-brand-charcoal/60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-mono text-brand-gold">{q.id}</span>
+                      <StatusPill status={q.status} />
+                    </div>
+                    <div className="text-sm text-white truncate mt-0.5">{q.customerName}</div>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-brand-gray mt-0.5">
+                      <span>{new Date(q.updatedAt).toLocaleDateString("en-CA")}</span>
+                      <span className="text-white">{fmtCAD(q.grandTotalCAD)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadQuoteForEdit(q.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded border border-brand-border hover:border-brand-gold text-[9px] font-mono uppercase tracking-wider text-brand-gray hover:text-brand-gold"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        Edit
+                      </button>
+                      <a
+                        href={`/admin/quotes/${q.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded border border-brand-border hover:border-brand-gold text-[9px] font-mono uppercase tracking-wider text-brand-gray hover:text-brand-gold"
+                      >
+                        <FileDown className="w-3 h-3" />
+                        PDF
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => void deleteDocument(q.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded border border-red-500/30 hover:bg-red-500/10 text-[9px] font-mono uppercase tracking-wider text-red-300"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-sm text-white truncate mt-0.5">{q.customerName}</div>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-brand-gray mt-0.5">
-                    <span>{new Date(q.updatedAt).toLocaleDateString("en-CA")}</span>
-                    <span className="text-white">{fmtCAD(q.grandTotalCAD)}</span>
-                  </div>
-                </a>
-              ))
+                );
+              })
             )}
           </div>
         </div>

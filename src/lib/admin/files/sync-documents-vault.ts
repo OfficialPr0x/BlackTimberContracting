@@ -5,8 +5,10 @@
 
 import "server-only";
 
+import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   createMarkdownFile,
+  deleteFileNode,
   listFileNodes,
   updateMarkdownContent,
 } from "./repository";
@@ -105,4 +107,22 @@ export async function syncDocumentsToVault(): Promise<SyncDocumentsVaultResult> 
   }
 
   return result;
+}
+
+/** Remove synced vault markdown archives for a deleted Q-/E-/I- document. */
+export async function deleteVaultArchivesForDocument(docId: string): Promise<number> {
+  if (!isSupabaseConfigured()) return 0;
+
+  const flat = await listFileNodes();
+  const matches = flat.filter(
+    (n) =>
+      n.kind === "file" &&
+      (n.name.startsWith(`${docId}-`) || n.name.startsWith(`${docId}.`))
+  );
+
+  for (const node of matches) {
+    await deleteFileNode(node.id);
+  }
+
+  return matches.length;
 }

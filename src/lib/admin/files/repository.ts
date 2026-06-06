@@ -202,13 +202,77 @@ export async function updateMarkdownContent(id: string, content: string): Promis
   }
 }
 
+function collectSubtreeIds(flat: FileNodeRow[], rootId: string): string[] {
+  const out = [rootId];
+  for (const n of flat) {
+    if (n.parentId === rootId) {
+      out.push(...collectSubtreeIds(flat, n.id));
+    }
+  }
+  return out;
+}
+
+export async function updateFileNodeMeta(
+  id: string,
+  patch: { name?: string; parentId?: string | null }
+): Promise<FileNodeRow> {
+  const sb = requireSb();
+  const updates: Record<string, unknown> = {};
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    if (trimmed.length < 1) {
+      throw new AiError({
+        code: "invalid_input",
+        status: 400,
+        clientMessage: "Name is required.",
+      });
+    }
+    updates.name = trimmed;
+  }
+  if (patch.parentId !== undefined) updates.parent_id = patch.parentId;
+
+  const { data, error } = await sb
+    .from("file_nodes")
+    .update(updates)
+    .eq("id", id)
+    .select("id, parent_id, kind, name, mime_type, size_bytes, text_content, updated_at")
+    .single();
+
+  if (error) {
+    throw new AiError({
+      code: "internal",
+      status: 500,
+      clientMessage: error.message.includes("unique")
+        ? "A file or folder with that name already exists here."
+        : "Could not update.",
+      message: error.message,
+    });
+  }
+
+  return rowToSummary(data);
+}
+
 export async function deleteFileNode(id: string): Promise<void> {
   const sb = requireSb();
-  const { data } = await sb.from("file_nodes").select("kind, storage_path").eq("id", id).maybeSingle();
-  if (!data) return;
+  const flat = await listFileNodes();
+  const subtree = collectSubtreeIds(flat, id);
+  const byId = new Map(flat.map((n) => [n.id, n]));
 
-  if (data.kind === "file" && data.storage_path) {
-    await sb.storage.from(BUCKET).remove([data.storage_path]);
+  const storagePaths: string[] = [];
+  for (const nid of subtree) {
+    const node = byId.get(nid);
+    if (node?.kind === "file") {
+      const full = await sb
+        .from("file_nodes")
+        .select("storage_path")
+        .eq("id", nid)
+        .maybeSingle();
+      if (full.data?.storage_path) storagePaths.push(full.data.storage_path as string);
+    }
+  }
+
+  if (storagePaths.length) {
+    await sb.storage.from(BUCKET).remove(storagePaths);
   }
 
   const { error } = await sb.from("file_nodes").delete().eq("id", id);

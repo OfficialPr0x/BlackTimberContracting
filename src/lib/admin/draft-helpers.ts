@@ -137,7 +137,53 @@ export function buildPreviewDocument(input: DraftPayload): AdminQuoteSaved {
   };
 }
 
-/** Payload for POST /api/admin/quotes from current form state. */
+/** Hydrate builder form state from a saved document. */
+export function draftFromSavedQuote(quote: AdminQuoteSaved): {
+  customer: AdminQuoteCustomer;
+  project: AdminQuoteProject;
+  lines: LineDraft[];
+  taxMode: AdminQuoteTaxMode;
+  freightCAD: number;
+  documentType: AdminDocumentType;
+  validUntil: string;
+  internalNotes: string;
+  paymentTerms: string;
+  paymentInstructions: string;
+  status: AdminQuoteSaved["status"];
+} {
+  return {
+    customer: {
+      name: quote.customer.name,
+      email: quote.customer.email ?? "",
+      phone: quote.customer.phone ?? "",
+      billingAddress: quote.customer.billingAddress ?? "",
+      jobSiteAddress: quote.customer.jobSiteAddress ?? "",
+    },
+    project: { ...quote.project },
+    lines:
+      quote.lines.length > 0
+        ? quote.lines.map((l) => ({
+            id: l.id,
+            description: l.description,
+            quantity: l.quantity,
+            uom: l.uom,
+            unitPriceCAD: l.unitPriceCAD,
+            source: l.source,
+            leadTimeDays: l.leadTimeDays,
+            notes: l.notes,
+          }))
+        : [{ id: `line-${Date.now()}`, description: "", quantity: 1, uom: "EA" as const, unitPriceCAD: 0, source: "other" as const }],
+    taxMode: quote.taxMode,
+    freightCAD: quote.freightCAD,
+    documentType: quote.documentType,
+    validUntil: quote.validUntil,
+    internalNotes: quote.internalNotes ?? "",
+    paymentTerms: quote.paymentTerms ?? "Net 14",
+    paymentInstructions: quote.paymentInstructions ?? "",
+    status: quote.status,
+  };
+}
+
 export function buildSavePayload(input: DraftPayload): Record<string, unknown> {
   const scopeSummary = deriveScopeSummary(input.project, input.lines, input.documentType);
   const lines = filterValidLines(input.lines);

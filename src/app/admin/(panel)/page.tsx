@@ -108,19 +108,31 @@ export default async function AdminDashboardPage() {
           </div>
           <ul className="rounded-2xl border border-brand-border divide-y divide-brand-border overflow-hidden">
             {recentQuotes.map((q) => (
-              <li key={q.id}>
-                <Link
-                  href={`/admin/quotes/${q.id}`}
-                  className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-brand-charcoal/60 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <span className="text-xs font-mono text-brand-gold">{q.id}</span>
-                    <p className="text-sm text-white truncate">{q.customer.name}</p>
-                  </div>
-                  <span className="text-sm text-white shrink-0 font-mono">
+              <li
+                key={q.id}
+                className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-brand-charcoal/60 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-mono text-brand-gold">{q.id}</span>
+                  <p className="text-sm text-white truncate">{q.customer.name}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm text-white font-mono hidden sm:inline">
                     {fmtCAD(q.totals.grandTotalCAD)}
                   </span>
-                </Link>
+                  <Link
+                    href={`/admin/quotes?edit=${encodeURIComponent(q.id)}`}
+                    className="text-[9px] font-mono uppercase tracking-wider text-brand-gray hover:text-brand-gold px-2 py-1 border border-brand-border rounded"
+                  >
+                    Edit
+                  </Link>
+                  <Link
+                    href={`/admin/quotes/${q.id}`}
+                    className="text-[9px] font-mono uppercase tracking-wider text-brand-gold px-2 py-1 border border-brand-gold/40 rounded"
+                  >
+                    PDF
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

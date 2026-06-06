@@ -6,7 +6,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Loader, Printer } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Loader, Pencil, Printer, Trash2 } from "lucide-react";
 import BrandedDocument, { idToDocType } from "@/components/admin/BrandedDocument";
 import type { BusinessProfile } from "@/lib/business-config";
 import type { AdminQuoteSaved } from "@/lib/admin/schemas";
@@ -23,9 +24,11 @@ export default function QuoteDetailView({
   initialQuote,
   business,
 }: QuoteDetailViewProps) {
+  const router = useRouter();
   const [quote, setQuote] = useState<AdminQuoteSaved | null>(initialQuote);
   const [loading, setLoading] = useState(!initialQuote);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (initialQuote) return;
@@ -66,6 +69,29 @@ export default function QuoteDetailView({
     };
   }, [id, initialQuote]);
 
+  const handleDelete = async () => {
+    if (
+      !confirm(
+        `Delete ${id} permanently? This removes the document and any synced vault archives.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/quotes/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error?.message ?? "Delete failed");
+      router.push("/admin/quotes");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(false);
+    }
+  };
+
   const docType = quote ? (quote.documentType ?? idToDocType(quote.id)) : idToDocType(id);
   const headline =
     docType === "invoice" ? "Invoice" : docType === "estimate" ? "Estimate" : "Quote";
@@ -94,7 +120,7 @@ export default function QuoteDetailView({
               "The save may not have persisted. On production, add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel, run supabase/schema.sql, then save again."}
           </p>
           <a
-            href="/admin"
+            href="/admin/quotes"
             className="inline-flex items-center gap-2 text-brand-gold font-mono text-xs uppercase tracking-widest"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to builder
@@ -107,10 +133,10 @@ export default function QuoteDetailView({
   return (
     <div className="min-h-screen bg-brand-black text-foreground print:bg-white">
       <header className="border-b border-brand-border bg-brand-charcoal/60 backdrop-blur-sm sticky top-0 z-30 print:hidden">
-        <div className="max-w-[880px] mx-auto px-5 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-[880px] mx-auto px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
             <a
-              href="/admin"
+              href="/admin/quotes"
               className="text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold"
             >
               ← Builder
@@ -119,14 +145,32 @@ export default function QuoteDetailView({
               {headline} {quote.id}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"
-          >
-            <Printer className="w-3 h-3" />
-            Print / save PDF
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href={`/admin/quotes?edit=${encodeURIComponent(quote.id)}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"
+            >
+              <Pencil className="w-3 h-3" />
+              Edit in builder
+            </a>
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-red-500/40 hover:bg-red-500/10 text-[10px] font-mono uppercase tracking-widest text-red-300 transition-colors disabled:opacity-50"
+            >
+              {deleting ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"
+            >
+              <Printer className="w-3 h-3" />
+              Print / save PDF
+            </button>
+          </div>
         </div>
       </header>
 

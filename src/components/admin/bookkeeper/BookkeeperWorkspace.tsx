@@ -19,6 +19,8 @@ import {
   Image as ImageIcon,
   PanelLeft,
   MessageSquare,
+  Pencil,
+  FolderInput,
 } from "lucide-react";
 import Markdown from "@/components/Markdown";
 import SpreadsheetViewer from "./SpreadsheetViewer";
@@ -27,6 +29,38 @@ import { guessViewer } from "@/lib/admin/files/types";
 
 type MobilePane = "files" | "editor" | "chat";
 type MdViewMode = "preview" | "source";
+
+function findTreeNode(nodes: FileTreeNode[], id: string): FileTreeNode | null {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    if (n.kind === "folder") {
+      const child = findTreeNode(n.children, id);
+      if (child) return child;
+    }
+  }
+  return null;
+}
+
+function collectFolders(
+  nodes: FileTreeNode[],
+  depth = 0,
+  excludeId?: string
+): { id: string; label: string }[] {
+  const out: { id: string; label: string }[] = [];
+  for (const n of nodes) {
+    if (n.kind === "folder" && n.id !== excludeId) {
+      out.push({ id: n.id, label: `${"— ".repeat(depth)}${n.name}` });
+      out.push(...collectFolders(n.children, depth + 1, excludeId));
+    }
+  }
+  return out;
+}
+
+function isDescendantFolder(nodes: FileTreeNode[], ancestorId: string, targetId: string): boolean {
+  const ancestor = findTreeNode(nodes, ancestorId);
+  if (!ancestor || ancestor.kind !== "folder") return false;
+  return !!findTreeNode(ancestor.children, targetId);
+}
 
 interface ChatMsg {
   role: "user" | "assistant";
@@ -117,8 +151,19 @@ export default function BookkeeperWorkspace() {
   const [chatInput, setChatInput] = useState("");
   const [chatPending, setChatPending] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<string>("");
   const uploadRef = useRef<HTMLInputElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  const selectedNode = useMemo(
+    () => (selectedId ? findTreeNode(tree, selectedId) : null),
+    [selectedId, tree]
+  );
+
+  const folderOptions = useMemo(() => {
+    if (!selectedId) return [];
+    return collectFolders(tree, 0, selectedNode?.kind === "folder" ? selectedId : undefined);
+  }, [selectedId, selectedNode?.kind, tree]);
 
   const refreshTree = useCallback(async () => {
     const res = await fetch("/api/admin/files");
@@ -225,6 +270,74 @@ export default function BookkeeperWorkspace() {
     return guessViewer(file.mimeType, file.name);
   }, [file]);
 
+  const patchNode = async (
+    id: string,
+    patch: { name?: string; parentId?: string | null; content?: string }
+  ) => {
+    const res = await fetch(`/api/admin/files/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body?.error?.message ?? "Update failed");
+    return body as FileNodeDetail;
+  };
+
+  const renameSelected = async () => {
+    if (!selectedId || !selectedNode) return;
+    const next = window.prompt("New name", selectedNode.name);
+    if (!next?.trim() || next.trim() === selectedNode.name) return;
+    setError(null);
+    try {
+      const updated = await patchNode(selectedId, { name: next.trim() });
+      await refreshTree();
+      if (file?.id === selectedId) setFile(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Rename failed");
+    }
+  };
+
+  const moveSelected = async (parentId: string | null) => {
+    if (!selectedId || !selectedNode) return;
+    if (selectedNode.kind === "folder" && parentId === selectedId) return;
+    if (
+      selectedNode.kind === "folder" &&
+      parentId &&
+      isDescendantFolder(tree, selectedId, parentId)
+    ) {
+      setError("Cannot move a folder into itself or its subfolders.");
+      return;
+    }
+    setError(null);
+    try {
+      const updated = await patchNode(selectedId, { parentId });
+      await refreshTree();
+      setMoveTarget("");
+      if (file?.id === selectedId) setFile(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Move failed");
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (!selectedId || !selectedNode) return;
+    const label = selectedNode.kind === "folder" ? "folder and all contents" : "file";
+    if (!confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/files/${selectedId}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error?.message ?? "Delete failed");
+      if (file?.id === selectedId) setFile(null);
+      setSelectedId(null);
+      if (selectedFolderId === selectedId) setSelectedFolderId(null);
+      await refreshTree();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
+
   const handleUpload = async (list: FileList | null) => {
     if (!list?.length) return;
     setError(null);
@@ -243,7 +356,7 @@ export default function BookkeeperWorkspace() {
     setSaving(true);
     try {
       const res = await fetch(`/api/admin/files/${file.id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: mdDraft }),
       });
@@ -408,6 +521,58 @@ export default function BookkeeperWorkspace() {
           onChange={(e) => void handleUpload(e.target.files).catch((err) => setError(String(err)))}
         />
       </div>
+      {selectedNode ? (
+        <div className="px-2 py-2 border-b border-brand-border space-y-2">
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-[10px] font-mono text-brand-gray truncate flex-1 min-w-0">
+              {selectedNode.kind === "folder" ? "Folder" : "File"}:{" "}
+              <span className="text-brand-gold">{selectedNode.name}</span>
+            </span>
+            <button
+              type="button"
+              title="Rename"
+              onClick={() => void renameSelected()}
+              className="p-1.5 rounded border border-brand-border hover:border-brand-gold text-brand-gray hover:text-brand-gold"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Delete"
+              onClick={() => void deleteSelected()}
+              className="p-1.5 rounded border border-red-500/30 text-red-300 hover:bg-red-500/10"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <FolderInput className="w-3.5 h-3.5 text-brand-gray shrink-0" />
+            <select
+              value={moveTarget}
+              onChange={(e) => setMoveTarget(e.target.value)}
+              className="flex-1 min-w-0 text-[10px] font-mono bg-brand-black border border-brand-border rounded px-1.5 py-1 text-brand-gray"
+            >
+              <option value="">Move to…</option>
+              <option value="__root__">Vault root</option>
+              {folderOptions.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!moveTarget}
+              onClick={() =>
+                void moveSelected(moveTarget === "__root__" ? null : moveTarget || null)
+              }
+              className="px-2 py-1 rounded border border-brand-border hover:border-brand-gold text-[9px] font-mono uppercase tracking-wider text-brand-gray hover:text-brand-gold disabled:opacity-40"
+            >
+              Go
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex-1 overflow-y-auto p-2">
         {loading ? (
           <p className="text-xs text-brand-gray font-mono p-2">Loading vault…</p>
@@ -501,13 +666,9 @@ export default function BookkeeperWorkspace() {
               ) : null}
               <button
                 type="button"
-                onClick={async () => {
-                  if (!confirm("Delete this item?")) return;
-                  await fetch(`/api/admin/files/${file.id}`, { method: "DELETE" });
-                  setFile(null);
-                  await refreshTree();
-                }}
+                onClick={() => void deleteSelected()}
                 className="p-1.5 rounded border border-red-500/30 text-red-300 hover:bg-red-500/10"
+                title="Delete file"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>

@@ -44,6 +44,45 @@ export function filterValidLines(lines: LineDraft[]): AdminQuoteLine[] {
   return lines.filter((l) => l.description.trim().length > 0);
 }
 
+/** Postgres / get_document JSON uses null; Zod `.optional()` rejects null. */
+export function finiteOptional(n: unknown): number | undefined {
+  if (n == null || n === "") return undefined;
+  const v = typeof n === "number" ? n : Number(n);
+  return Number.isFinite(v) ? v : undefined;
+}
+
+export function optionalString(s: unknown): string | undefined {
+  if (s == null) return undefined;
+  const t = String(s).trim();
+  return t || undefined;
+}
+
+/** Deep-convert null → undefined so AdminQuoteInput validation passes on edits. */
+export function stripNullsDeep(value: unknown): unknown {
+  if (value === null) return undefined;
+  if (Array.isArray(value)) return value.map(stripNullsDeep);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, stripNullsDeep(v)])
+    );
+  }
+  return value;
+}
+
+function normalizeLineDraft(l: LineDraft): AdminQuoteLine {
+  const lead = finiteOptional(l.leadTimeDays);
+  return {
+    id: l.id,
+    description: l.description.trim(),
+    quantity: finiteOptional(l.quantity) ?? 1,
+    uom: l.uom,
+    unitPriceCAD: finiteOptional(l.unitPriceCAD) ?? 0,
+    source: l.source,
+    ...(lead !== undefined ? { leadTimeDays: Math.round(lead) } : {}),
+    ...(optionalString(l.notes) ? { notes: optionalString(l.notes) } : {}),
+  };
+}
+
 /** Build scope text from line items when the user skipped the textarea. */
 export function deriveScopeSummary(
   project: AdminQuoteProject,
@@ -159,18 +198,25 @@ export function draftFromSavedQuote(quote: AdminQuoteSaved): {
       billingAddress: quote.customer.billingAddress ?? "",
       jobSiteAddress: quote.customer.jobSiteAddress ?? "",
     },
-    project: { ...quote.project },
+    project: {
+      type: quote.project.type,
+      scopeSummary: quote.project.scopeSummary,
+      lengthFt: finiteOptional(quote.project.lengthFt),
+      widthFt: finiteOptional(quote.project.widthFt),
+      material: optionalString(quote.project.material),
+      notes: optionalString(quote.project.notes),
+    },
     lines:
       quote.lines.length > 0
         ? quote.lines.map((l) => ({
             id: l.id,
             description: l.description,
-            quantity: l.quantity,
+            quantity: finiteOptional(l.quantity) ?? 1,
             uom: l.uom,
-            unitPriceCAD: l.unitPriceCAD,
+            unitPriceCAD: finiteOptional(l.unitPriceCAD) ?? 0,
             source: l.source,
-            leadTimeDays: l.leadTimeDays,
-            notes: l.notes,
+            leadTimeDays: finiteOptional(l.leadTimeDays),
+            notes: optionalString(l.notes),
           }))
         : [{ id: `line-${Date.now()}`, description: "", quantity: 1, uom: "EA" as const, unitPriceCAD: 0, source: "other" as const }],
     taxMode: quote.taxMode,
@@ -186,24 +232,30 @@ export function draftFromSavedQuote(quote: AdminQuoteSaved): {
 
 export function buildSavePayload(input: DraftPayload): Record<string, unknown> {
   const scopeSummary = deriveScopeSummary(input.project, input.lines, input.documentType);
-  const lines = filterValidLines(input.lines);
+  const lines = filterValidLines(input.lines).map(normalizeLineDraft);
+
+  const project: AdminQuoteProject = {
+    type: input.project.type,
+    scopeSummary,
+    material: optionalString(input.project.material),
+    notes: optionalString(input.project.notes),
+  };
+  const lengthFt = finiteOptional(input.project.lengthFt);
+  const widthFt = finiteOptional(input.project.widthFt);
+  if (lengthFt !== undefined) project.lengthFt = lengthFt;
+  if (widthFt !== undefined) project.widthFt = widthFt;
 
   return {
     id: input.savedQuoteId ?? undefined,
     documentType: input.documentType,
     customer: {
-      ...input.customer,
-      email: input.customer.email?.trim() || undefined,
-      phone: input.customer.phone?.trim() || undefined,
-      billingAddress: input.customer.billingAddress?.trim() || undefined,
-      jobSiteAddress: input.customer.jobSiteAddress?.trim() || undefined,
+      name: input.customer.name.trim(),
+      email: optionalString(input.customer.email),
+      phone: optionalString(input.customer.phone),
+      billingAddress: optionalString(input.customer.billingAddress),
+      jobSiteAddress: optionalString(input.customer.jobSiteAddress),
     },
-    project: {
-      ...input.project,
-      scopeSummary,
-      material: input.project.material?.trim() || undefined,
-      notes: input.project.notes?.trim() || undefined,
-    },
+    project,
     lines,
     taxMode: input.taxMode,
     freightCAD: input.freightCAD,

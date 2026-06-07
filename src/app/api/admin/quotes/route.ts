@@ -15,6 +15,7 @@
 
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
 import { requireAdminRoute } from "@/lib/admin/session";
+import { stripNullsDeep } from "@/lib/admin/draft-helpers";
 import { AdminQuoteInput } from "@/lib/admin/schemas";
 import { listQuotes, saveQuote } from "@/lib/admin/quotes";
 
@@ -35,12 +36,16 @@ export async function POST(req: Request) {
       });
     }
 
-    const parsed = AdminQuoteInput.safeParse(json);
+    const parsed = AdminQuoteInput.safeParse(stripNullsDeep(json));
     if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const hint = issue
+        ? `${issue.path.length ? issue.path.join(".") + ": " : ""}${issue.message}`
+        : "Check required fields.";
       throw new AiError({
         code: "invalid_input",
         status: 400,
-        clientMessage: "Quote shape was invalid. Check required fields.",
+        clientMessage: `Quote shape was invalid. ${hint}`,
         message: parsed.error.message,
       });
     }

@@ -10,10 +10,12 @@
 import Image from "next/image";
 import { BRAND } from "@/lib/brand";
 import type { BusinessProfile } from "@/lib/business-config";
-import type {
-  AdminDocumentType,
-  AdminQuoteSaved,
-  AdminQuoteTaxMode,
+import {
+  PAYMENT_METHOD_LABELS,
+  type AdminDocumentType,
+  type AdminQuoteSaved,
+  type AdminQuoteTaxMode,
+  type InvoicePaymentSummary,
 } from "@/lib/admin/schemas";
 
 export function idToDocType(id: string): AdminDocumentType {
@@ -118,9 +120,12 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export default function BrandedDocument({
   quote,
   business,
+  payments,
 }: {
   quote: AdminQuoteSaved;
   business: BusinessProfile;
+  /** When set on invoices, shows payments received and balance due on the PDF. */
+  payments?: InvoicePaymentSummary | null;
 }) {
   const docType = quote.documentType ?? idToDocType(quote.id);
   const copy = copyForDoc(docType);
@@ -394,6 +399,43 @@ export default function BrandedDocument({
                     .join("\n")}
               </p>
             </div>
+          </section>
+        ) : null}
+
+        {copy.showPayment && payments && payments.payments.length > 0 ? (
+          <section
+            className="mt-6 p-5 rounded-lg break-inside-avoid"
+            style={{ background: BRAND.paperAccent, border: `1px solid ${BRAND.gold}55` }}
+          >
+            <SectionLabel>Payments received</SectionLabel>
+            <table className="w-full text-[12px] mt-2">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-widest text-black/50 border-b" style={{ borderColor: `${BRAND.gold}44` }}>
+                  <th className="text-left py-1.5 font-medium">Date</th>
+                  <th className="text-left py-1.5 font-medium">Method</th>
+                  <th className="text-right py-1.5 font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.payments.map((p) => (
+                  <tr key={p.id} className="border-b border-black/5">
+                    <td className="py-2 font-mono">{fmtDate(p.paidAt)}</td>
+                    <td className="py-2">{PAYMENT_METHOD_LABELS[p.method]}</td>
+                    <td className="py-2 text-right font-mono font-semibold">{fmtCAD(p.amountCAD)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-4 text-[12px] font-mono max-w-xs ml-auto">
+              <dt className="text-black/60">Total paid</dt>
+              <dd className="text-right font-semibold">{fmtCAD(payments.totalPaidCAD)}</dd>
+              <dt className="text-black/60 font-bold">Balance due</dt>
+              <dd className="text-right font-bold" style={{ color: BRAND.goldDark }}>
+                {payments.balanceDueCAD <= 0.005
+                  ? "Paid in full"
+                  : fmtCAD(payments.balanceDueCAD)}
+              </dd>
+            </dl>
           </section>
         ) : null}
 

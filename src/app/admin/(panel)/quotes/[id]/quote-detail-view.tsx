@@ -10,7 +10,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader, Pencil, Printer, Trash2 } from "lucide-react";
 import BrandedDocument, { idToDocType } from "@/components/admin/BrandedDocument";
 import type { BusinessProfile } from "@/lib/business-config";
-import type { AdminQuoteSaved } from "@/lib/admin/schemas";
+import InvoicePaymentTracker from "@/components/admin/InvoicePaymentTracker";
+import type { AdminQuoteSaved, InvoicePaymentSummary } from "@/lib/admin/schemas";
 import { readCachedSavedDocument } from "@/lib/admin/saved-doc-cache";
 
 interface QuoteDetailViewProps {
@@ -29,6 +30,7 @@ export default function QuoteDetailView({
   const [loading, setLoading] = useState(!initialQuote);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [payments, setPayments] = useState<InvoicePaymentSummary | null>(null);
 
   useEffect(() => {
     if (initialQuote) return;
@@ -68,6 +70,23 @@ export default function QuoteDetailView({
       cancelled = true;
     };
   }, [id, initialQuote]);
+
+  useEffect(() => {
+    if (!id.startsWith("I-")) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/quotes/${encodeURIComponent(id)}/payments`);
+        const body = await res.json();
+        if (!cancelled && res.ok) setPayments(body as InvoicePaymentSummary);
+      } catch {
+        /* payments optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const handleDelete = async () => {
     if (
@@ -179,7 +198,20 @@ export default function QuoteDetailView({
           Print or Save as PDF — enable <strong className="text-brand-gold">Background graphics</strong>{" "}
           in the print dialog for logo and colors.
         </p>
-        <BrandedDocument quote={quote} business={business} />
+        {docType === "invoice" ? (
+          <div className="mb-8 print:hidden rounded-xl border border-brand-border bg-brand-charcoal/40 p-5">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-brand-gold mb-4">
+              Record payment
+            </p>
+            <InvoicePaymentTracker
+              invoiceId={quote.id}
+              grandTotalCAD={quote.totals.grandTotalCAD}
+              onSummaryChange={setPayments}
+              onStatusChange={(status) => setQuote((q) => (q ? { ...q, status } : q))}
+            />
+          </div>
+        ) : null}
+        <BrandedDocument quote={quote} business={business} payments={payments} />
       </main>
     </div>
   );

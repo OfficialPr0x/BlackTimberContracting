@@ -201,6 +201,50 @@ export const AdminQuoteSaved = AdminQuoteInput.required({
 export type AdminQuoteSaved = z.infer<typeof AdminQuoteSaved>;
 
 // =============================================================================
+// Invoice payments
+// =============================================================================
+
+export const InvoicePaymentMethod = z.enum(["cash", "e_transfer", "credit_card"]);
+export type InvoicePaymentMethod = z.infer<typeof InvoicePaymentMethod>;
+
+export const PAYMENT_METHOD_LABELS: Record<InvoicePaymentMethod, string> = {
+  cash: "Cash",
+  e_transfer: "E-Transfer",
+  credit_card: "Credit Card",
+};
+
+export const InvoicePayment = z.object({
+  id: z.string().uuid(),
+  documentId: z.string(),
+  amountCAD: z.number(),
+  method: InvoicePaymentMethod,
+  paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes: z.string().max(500).optional(),
+  createdAt: z.string(),
+  createdBy: z.string(),
+});
+export type InvoicePayment = z.infer<typeof InvoicePayment>;
+
+export const InvoicePaymentInput = z.object({
+  amountCAD: z.number().min(0.01).max(1_000_000),
+  method: InvoicePaymentMethod,
+  paidAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+    .optional(),
+  notes: z.string().max(500).optional(),
+});
+export type InvoicePaymentInput = z.infer<typeof InvoicePaymentInput>;
+
+export const InvoicePaymentSummary = z.object({
+  payments: z.array(InvoicePayment),
+  totalPaidCAD: z.number(),
+  balanceDueCAD: z.number(),
+  grandTotalCAD: z.number(),
+});
+export type InvoicePaymentSummary = z.infer<typeof InvoicePaymentSummary>;
+
+// =============================================================================
 // AI line-item suggestion endpoint
 // =============================================================================
 

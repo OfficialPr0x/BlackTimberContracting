@@ -62,6 +62,7 @@ import type {
   QuoteLineSource,
   QuoteLineUom,
 } from "@/lib/admin/schemas";
+import InvoicePaymentTracker from "@/components/admin/InvoicePaymentTracker";
 import CmdK from "./cmd-k";
 
 interface RecentQuoteSummary {
@@ -1121,6 +1122,20 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
               These appear on the printed invoice. GST# pulls from your BUSINESS_GST_NUMBER env var.
             </p>
           </Section>
+        ) : null}
+
+        {documentType === "invoice" && savedQuoteId ? (
+          <Section title="Payment tracking">
+            <InvoicePaymentTracker
+              invoiceId={savedQuoteId}
+              grandTotalCAD={totals.grand}
+              onStatusChange={(status) => setDocumentStatus(status)}
+            />
+          </Section>
+        ) : documentType === "invoice" ? (
+          <p className="text-xs text-brand-gray font-mono border border-brand-border rounded-lg px-4 py-3">
+            Save this invoice first, then record Cash · E-Transfer · Credit Card payments here.
+          </p>
         ) : null}
 
         {/* ---- Totals ---- */}

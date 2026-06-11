@@ -375,8 +375,38 @@ h1, h2, h3, h4, h5, h6 {
 .prose-guide em {
   color: #6b6560;
 }
+.prose-guide p:has(> img) {
+  margin: 1.35rem 0 0;
+  break-inside: avoid;
+}
+.prose-guide p:has(> img) img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin: 0;
+  border-radius: 0.75rem;
+  border: 1px solid #e8e4dc;
+  background: #0b0a09;
+  box-shadow: 0 12px 40px -24px rgba(11, 10, 9, 0.45);
+}
+.prose-guide p:has(> img) + p > em:only-child {
+  display: block;
+  margin-top: 0.55rem;
+  margin-bottom: 1.75rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8c714c;
+  font-style: normal;
+}
 @media print {
   .prose-guide h2 {
     page-break-after: avoid;
+  }
+  .prose-guide p:has(> img) {
+    page-break-inside: avoid;
   }
 }

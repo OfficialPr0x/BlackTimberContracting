@@ -6,11 +6,17 @@
 
 The Kootenay region of south‑eastern British Columbia combines alpine valleys, temperate rain forests and high‑mountain plateaus. Communities such as Fernie, Sparwood, Elkford, Cranbrook and Nelson sit in narrow river valleys ringed by steep slopes. This complex geography creates a dynamic environment: heavy winter snowfalls and freeze‑thaw cycles, spring freshets that raise river levels, the risk of wildfires in dry summers, and landslide hazards where steep slopes meet developed areas. Homeownership here is both rewarding and challenging—your house must withstand heavy snow loads, remain efficient in a cold climate, and be ready for natural hazards. This field guide assembles local knowledge, regulatory requirements, scientific advice and hands‑on checklists into one comprehensive manual so you can plan projects wisely, protect your investment and keep your family safe.
 
+{{GUIDE_IMAGE:1}}
+
 ## 1 Project readiness checklist
 
 Before you approach a contractor or begin a renovation, collect the right information. A clear brief will reduce delays and unexpected costs.
 
+{{GUIDE_IMAGE:2}}
+
 - **Document your property:** take photos of all sides of the house and of any damage or areas you wish to change. Measure rooms, doorways, windows and existing structures.
+
+{{GUIDE_IMAGE:3}}
 - **Define scope:** list essential repairs (e.g., replace rotten deck boards), nice‑to‑have improvements (add a screened porch) and long‑term goals (energy upgrade). Rank them.
 - **Budget range:** decide the maximum you can spend and a comfortable range. Include contingencies of at least 15–20 % for hidden issues.
 - **Timeline:** consider seasonal constraints—major exterior work should not happen during the heaviest snow period. Plan early; some contractors book months ahead.
@@ -22,6 +28,8 @@ Before you approach a contractor or begin a renovation, collect the right inform
 Use the forms in the appendix to compile this information before seeking quotes.
 
 ## 2 Contractor red flags & hiring tips
+
+{{GUIDE_IMAGE:4}}
 
 A good contractor will provide clear written scopes of work, material specifications, timelines and payment schedules. Watch for the following warning signs:
 
@@ -35,6 +43,8 @@ A good contractor will provide clear written scopes of work, material specificat
 Seek at least three quotes, compare them using the template in Section 16, and verify credentials through BC Housing's registry of licensed residential builders.
 
 ## 3 Building permits & regulatory requirements
+
+{{GUIDE_IMAGE:5}}
 
 ### 3.1 When permits are required
 
@@ -68,6 +78,8 @@ In addition to a building permit, you may need:
 
 ## 4 BC Building Code & Energy Step Code
 
+{{GUIDE_IMAGE:6}}
+
 British Columbia's building code sets minimum standards, but local districts in the Kootenays have adopted the BC Energy Step Code to improve energy efficiency. The Step Code outlines five performance "steps" for Part 9 (houses and small buildings) and four steps for Part 3 (large buildings), culminating in Net‑Zero Energy Ready by 2032. Since 1 May 2023, new homes must be 20 % more energy efficient than the 2018 Building Code baseline, equivalent to Step 3 for most houses. The provincial plan targets a 40 % improvement by 2027 and Net‑Zero Energy Ready by 2032.
 
 Implementing the Step Code requires an energy model during design and blower‑door testing at completion. Builders often work with Energy Advisors to simulate heat‑loss and choose appropriate insulation, windows and mechanical systems.
@@ -80,6 +92,8 @@ Implementing the Step Code requires an energy model during design and blower‑d
 - **Humidity & rainfall:** Heavy rains and valley fog require attention to drainage and moisture management. Overhangs, rain‑screen wall assemblies, and properly installed flashing reduce rot risk.
 
 ## 5 Energy efficiency & rebates
+
+{{GUIDE_IMAGE:7}}
 
 ### 5.1 CleanBC rebates
 
@@ -111,6 +125,8 @@ Check Natural Resources Canada (NRCan) for current eligibility and to book a reg
 
 ## 6 Materials & design for durability
 
+{{GUIDE_IMAGE:8}}
+
 The Kootenays' climate demands resilient materials:
 
 - **Timber species:** pressure‑treated lumber, cedar or larch for exterior structures; avoid untreated spruce or pine outdoors.
@@ -120,6 +136,8 @@ The Kootenays' climate demands resilient materials:
 - **Vapour control:** use appropriate vapour barriers (Class I or II) depending on assembly. Condensation within walls is a major cause of mold and rot.
 
 ## 7 Wildfire preparedness & FireSmart practices
+
+{{GUIDE_IMAGE:9}}
 
 Wildfires are a natural part of B.C. ecosystems, but increasing development in forested areas elevates risk. The FireSmart Homeowners Manual explains how wildfires spread (direct flame contact, radiant heat and wind‑borne embers) and offers practical mitigation strategies.
 
@@ -147,6 +165,8 @@ Check with your insurer about wildfire coverage and document property improvemen
 
 ## 8 Flood & water management
 
+{{GUIDE_IMAGE:10}}
+
 Spring snowmelt, heavy rain and ice jams make floods the most frequent natural hazard in the Kootenays. The PreparedBC Flood Preparedness Guide offers advice for before, during and after floods.
 
 ### 8.1 Preparation & property modifications
@@ -166,6 +186,8 @@ The RDCK lists flood‑preparedness steps and provides sandbag locations in comm
 
 ## 9 Landslide & slope stability
 
+{{GUIDE_IMAGE:11}}
+
 Residential developments on steep slopes face landslide hazards. The PreparedBC Landslide Guide advises:
 
 - When buying a property, contact local government for hazard mapping and slope‑stability information; hire a professional geotechnical engineer for site assessment; and check land title documents for covenants.
@@ -174,6 +196,8 @@ Residential developments on steep slopes face landslide hazards. The PreparedBC 
 - Landslide damage is usually excluded from standard home insurance policies; inquire about additional coverage.
 
 ## 10 Radon & indoor air quality
+
+{{GUIDE_IMAGE:12}}
 
 Radon is a radioactive gas released from soil and rock. In British Columbia, 8 % of homes exceed the guideline of 200 Bq/m³, with some communities reporting 29 % above the limit. Because radon is colourless and odourless, testing is the only way to know if your home is affected.
 
@@ -186,6 +210,8 @@ Purchase a long‑term radon test kit (3–6 months) from hardware stores or ord
 If results exceed 200 Bq/m³, hire a certified radon professional to install a sub‑slab depressurization system. This involves venting radon‑laden air from beneath the foundation. Seal cracks and openings in slabs and around service penetrations. Maintain good ventilation and consider heat recovery ventilators (HRVs) when tightening the building envelope.
 
 ## 11 Winter home maintenance
+
+{{GUIDE_IMAGE:13}}
 
 Cold winters in the Kootenays demand proactive maintenance. The BC PreparedBC Severe Weather Guide recommends:
 
@@ -207,6 +233,8 @@ Prevent infestations by removing decaying wood around buildings, replacing rotte
 
 ### 12.2 Bear‑smart property practices
 
+{{GUIDE_IMAGE:14}}
+
 Living in bear country requires reducing attractants. The BearSmart program advises that securing attractants is the single best way to keep people safe and prevent bears from being destroyed. Key practices include:
 
 - **Garbage:** store household waste and recycling in bear‑resistant containers or a locked, hard‑sided building. Put garbage out only shortly before collection and keep lids closed.
@@ -218,6 +246,8 @@ WildSafeBC also recommends removing bird feeders during bear season and cleaning
 
 ## 13 Emergency preparedness
 
+{{GUIDE_IMAGE:15}}
+
 Develop a household emergency plan covering fires, floods, earthquakes and landslides. Identify two meeting places, one close by and one farther away; create a contact list including out‑of‑area relatives; and know how local authorities will communicate during emergencies.
 
 Prepare grab‑and‑go kits containing water (4 L/person/day for at least three days), non‑perishable food, first‑aid kit, batteries, flashlight, radio, phone charger, cash, seasonal clothing and copies of important documents. Review kit contents every six months.
@@ -225,6 +255,8 @@ Prepare grab‑and‑go kits containing water (4 L/person/day for at least three
 Learn evacuation stages: Evacuation Alert means be ready to leave; Evacuation Order means leave immediately; Evacuation Rescind means it is safe to return. Familiarize yourself with sandbagging techniques if you live near rivers and with local emergency notification systems (RDCK and RDEK operate alert systems). Register for the BC Emergency Notification System and follow @EmergencyInfoBC on social media for real‑time information.
 
 ## 14 Budgeting & financing your project
+
+{{GUIDE_IMAGE:16}}
 
 Budget realistically by breaking costs into categories (materials, labour, permits, contingency). Use our quote comparison worksheet:
 

@@ -69,9 +69,9 @@ export default function PopupSubsCRM() {
             <BookOpen className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-sm text-white font-medium">Before You Leave — Deck Pricing Guide</p>
+            <p className="text-sm text-white font-medium">Before You Leave — Field Guide</p>
             <p className="text-xs text-brand-gray mt-0.5">
-              Email captures from the exit-intent popup. Tagged with source page and offer.
+              Password-protected e-guide signups. Each subscriber gets a unique access code (stored hashed in Supabase).
             </p>
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function PopupSubsCRM() {
             <tbody>
               {subs.map((sub) => {
                 const p = sub.payload;
-                const offer = (p.offer as string) ?? "Deck Pricing Guide";
+                const offer = (p.offer as string) ?? "Kootenay Field Guide";
                 const page = (p.page as string) ?? "/";
                 return (
                   <tr key={sub.id} className="border-b border-brand-border/60 hover:bg-brand-charcoal/30">

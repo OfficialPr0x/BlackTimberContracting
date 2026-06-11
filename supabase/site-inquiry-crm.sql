@@ -168,6 +168,31 @@ grant execute on function public.insert_lead(
 grant execute on function public.update_site_lead(uuid, text, text[], text) to service_role;
 
 -- -----------------------------------------------------------------------------
+-- Field guide subscribers (password-protected e-guide)
+-- Also run: supabase/field-guide.sql (duplicated here for one-shot setup)
+-- -----------------------------------------------------------------------------
+create table if not exists public.guide_subscribers (
+  id                  uuid primary key default gen_random_uuid(),
+  name                text not null check (char_length(name) between 2 and 120),
+  email               text not null check (char_length(email) <= 200),
+  password_hash       text not null,
+  guide_slug          text not null default 'kootenay-field-guide',
+  lead_id             uuid,
+  welcome_email_sent  boolean not null default false,
+  welcome_email_error text,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  unique (email, guide_slug)
+);
+
+create index if not exists guide_subscribers_email_idx
+  on public.guide_subscribers (lower(email));
+
+alter table public.guide_subscribers enable row level security;
+revoke all on public.guide_subscribers from anon, authenticated;
+grant all on public.guide_subscribers to service_role;
+
+-- -----------------------------------------------------------------------------
 -- VERIFY (optional — run after the script succeeds)
 -- -----------------------------------------------------------------------------
 -- Table + CRM columns:

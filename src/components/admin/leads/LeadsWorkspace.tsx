@@ -12,13 +12,15 @@ import {
   CheckCircle2,
   XCircle,
   Inbox,
+  BookOpen,
 } from "lucide-react";
 import SiteLeadsCRM from "@/components/admin/leads/SiteLeadsCRM";
+import PopupSubsCRM from "@/components/admin/leads/PopupSubsCRM";
 import Markdown from "@/components/Markdown";
 import type { ProspectSearchOutput } from "@/lib/leads/prospect-schemas";
 import type { ProspectLeadRow } from "@/lib/leads/prospect-types";
 
-type Tab = "site" | "find" | "pipeline";
+type Tab = "popup" | "site" | "find" | "pipeline";
 
 const STATUS_OPTIONS = [
   "new",
@@ -121,7 +123,7 @@ function ProspectCard({
 }
 
 export default function LeadsWorkspace() {
-  const [tab, setTab] = useState<Tab>("site");
+  const [tab, setTab] = useState<Tab>("popup");
   const [focus, setFocus] = useState(FOCUS_PRESETS[0]!.focus);
   const [region, setRegion] = useState("East Kootenay, BC");
   const [searching, setSearching] = useState(false);
@@ -198,12 +200,18 @@ export default function LeadsWorkspace() {
       <header>
         <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brand-gold">Leads</p>
         <h1 className="text-xl sm:text-2xl font-medium text-white mt-0.5">
-          {tab === "site" ? "Site inquiry CRM" : "B2B prospect finder"}
+          {tab === "popup"
+            ? "Popup subscribers"
+            : tab === "site"
+              ? "Quotes & bookings"
+              : "B2B prospect finder"}
         </h1>
         <p className="text-xs text-brand-gray mt-1">
-          {tab === "site"
-            ? "Quote wizard estimates, consultation bookings, and exit-intent signups from the public site"
-            : "Portfolio vision · SerpAPI · Perplexity web search — matched to what Black Timber actually builds"}
+          {tab === "popup"
+            ? "Exit-intent email signups from the Before You Leave deck guide popup"
+            : tab === "site"
+              ? "AI quote wizard estimates and consultation bookings from the public site"
+              : "Portfolio vision · SerpAPI · Perplexity web search — matched to what Black Timber actually builds"}
         </p>
       </header>
 
@@ -222,7 +230,8 @@ export default function LeadsWorkspace() {
       <div className="flex gap-1 p-1 rounded-xl bg-brand-panel border border-brand-border w-fit">
         {(
           [
-            ["site", Inbox, "Site CRM"],
+            ["popup", BookOpen, "Popup Subs"],
+            ["site", Inbox, "Quotes & Bookings"],
             ["find", Search, "Find"],
             ["pipeline", Building2, `Pipeline (${prospects.length})`],
           ] as const
@@ -247,6 +256,7 @@ export default function LeadsWorkspace() {
         </p>
       ) : null}
 
+      {tab === "popup" ? <PopupSubsCRM /> : null}
       {tab === "site" ? <SiteLeadsCRM /> : null}
 
       {tab === "find" ? (

@@ -55,17 +55,27 @@ export async function insertSiteLead(
   return leadId;
 }
 
-export async function listSiteLeads(limit = 100): Promise<SiteLeadRow[]> {
+interface ListLeadsFilter {
+  source?: string;
+  excludeSource?: string;
+}
+
+async function queryLeads(limit: number, filter?: ListLeadsFilter): Promise<SiteLeadRow[]> {
   const sb = getSupabaseAdmin();
   if (!sb || !isSupabaseConfigured()) return [];
 
-  const { data, error } = await sb
+  let q = sb
     .from("leads")
     .select(
       "id, source, name, email, phone, address, payload, status, tags, notes, delivered_file, delivered_email, delivered_slack, delivery_errors, created_at"
     )
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  if (filter?.source) q = q.eq("source", filter.source);
+  if (filter?.excludeSource) q = q.neq("source", filter.excludeSource);
+
+  const { data, error } = await q;
 
   if (error) {
     console.error("[list leads]", error.message);
@@ -89,6 +99,16 @@ export async function listSiteLeads(limit = 100): Promise<SiteLeadRow[]> {
     deliveryErrors: (r.delivery_errors as string[]) ?? [],
     createdAt: r.created_at as string,
   }));
+}
+
+/** Quote wizard estimates, bookings, property intel — not exit-intent popup signups. */
+export async function listSiteLeads(limit = 100): Promise<SiteLeadRow[]> {
+  return queryLeads(limit, { excludeSource: "exit_intent" });
+}
+
+/** Before-you-leave deck guide popup email captures. */
+export async function listPopupSubs(limit = 150): Promise<SiteLeadRow[]> {
+  return queryLeads(limit, { source: "exit_intent" });
 }
 
 export async function updateSiteLead(

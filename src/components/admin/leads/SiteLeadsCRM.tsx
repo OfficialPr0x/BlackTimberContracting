@@ -66,6 +66,7 @@ export default function SiteLeadsCRM() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | SiteLeadStatus>("all");
+  const [supabaseOk, setSupabaseOk] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -73,6 +74,7 @@ export default function SiteLeadsCRM() {
     const body = await res.json();
     if (!res.ok) throw new Error(body?.error?.message ?? "Could not load site leads");
     setLeads(body.leads as SiteLeadRow[]);
+    setSupabaseOk(!!body.supabase);
   }, []);
 
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function SiteLeadsCRM() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-brand-gray">
-          Form submissions, AI estimates, and consultation bookings from the public site.
+          Quote wizard AI estimates and consultation bookings (popup emails are under Popup Subs).
         </p>
         <button
           type="button"
@@ -134,6 +136,13 @@ export default function SiteLeadsCRM() {
         ))}
       </div>
 
+      {supabaseOk === false ? (
+        <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          Supabase not configured — run <code className="text-brand-gold">supabase/site-inquiry-crm.sql</code> and
+          set env keys. Leads still log to <code className="text-brand-gold">.data/leads.jsonl</code> locally.
+        </p>
+      ) : null}
+
       {error ? (
         <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
           {error}
@@ -142,7 +151,7 @@ export default function SiteLeadsCRM() {
 
       {visible.length === 0 ? (
         <p className="text-xs text-brand-gray py-6 text-center border border-dashed border-brand-border rounded-xl">
-          No site leads yet. Quote wizard bookings and exit-intent signups will appear here when Supabase is connected.
+          No quotes or bookings yet. Complete the quote wizard on the site to test.
         </p>
       ) : (
         <ul className="space-y-3">

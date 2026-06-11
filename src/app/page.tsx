@@ -29,9 +29,10 @@ const HERO_SLIDES: { src: string; position: string }[] = [
   },
 ];
 import QuoteWizard from "@/components/QuoteWizard";
-import Visualizer from "@/components/Visualizer";
+// Visualizer Studio hidden for now — component kept at @/components/Visualizer.tsx
 import DrawItOut from "@/components/DrawItOut";
 import ProjectCheck from "@/components/ProjectCheck";
+import ComingSoonSection from "@/components/ComingSoonSection";
 import CostCalculator from "@/components/CostCalculator";
 import LiveMap from "@/components/LiveMap";
 import ContractorTV from "@/components/ContractorTV";
@@ -47,7 +48,7 @@ import JobGallery from "@/components/JobGallery";
 
 export default function Home() {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
-  const [, setQuoteInitialStep] = useState(1);
+  const [quoteInitialStep, setQuoteInitialStep] = useState(1);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
 
@@ -301,9 +302,6 @@ export default function Home() {
 
           <div className="space-y-14">
             <div className="bg-brand-charcoal p-6 sm:p-8 rounded-3xl border border-brand-border">
-              <Visualizer />
-            </div>
-            <div className="bg-brand-charcoal p-6 sm:p-8 rounded-3xl border border-brand-border">
               <DrawItOut />
             </div>
             <div className="bg-brand-charcoal p-6 sm:p-8 rounded-3xl border border-brand-border">
@@ -341,9 +339,15 @@ export default function Home() {
       </section>
 
       {/* ─────────────── CONTRACTOR NETFLIX ─────────────── */}
-      <section className="py-20 sm:py-28 bg-brand-black border-b border-brand-border">
+      <section className="py-20 sm:py-28 bg-brand-black border-b border-brand-border" id="tv-section">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <ContractorTV />
+          <ComingSoonSection
+            title="Contractor Netflix"
+            subtitle="Real jobsite episodes are in production — cliffside decks, storm chases, and repair rescues. The full Black Timber TV library drops soon."
+            hint="Want to see our work now? Scroll to Transformations or call 250-910-9071."
+          >
+            <ContractorTV />
+          </ComingSoonSection>
         </div>
       </section>
 
@@ -483,6 +487,7 @@ export default function Home() {
       <QuoteWizard
         isOpen={isQuoteOpen}
         onClose={() => setIsQuoteOpen(false)}
+        initialStep={quoteInitialStep}
         initialType="deck"
       />
 

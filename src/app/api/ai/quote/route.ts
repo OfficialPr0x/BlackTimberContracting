@@ -15,6 +15,7 @@ import { QuoteInput, QuoteOutput, type QuoteOutput as QuoteOutputT } from "@/lib
 import { QUOTE_PROMPT } from "@/lib/openrouter/prompts";
 import { checkRate } from "@/lib/rate-limit";
 import { AiError } from "@/lib/openrouter/errors";
+import { estimateProject, type QuoteProjectType } from "@/lib/pricing/quote-engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -94,54 +95,100 @@ export async function POST(req: Request) {
  * customer always gets a useful estimate.
  */
 function deterministicQuote(input: QuoteInput): QuoteOutputT {
-  const area = input.dimensions.length * input.dimensions.width;
-  const matRate = input.material === "cedar" ? 65 : input.material === "composite" ? 85 : input.material === "treated" ? 45 : 60;
-  const addOnMap: Record<string, number> = {
-    stairs: 1800, lighting: 1200, railing: 2500, pergola: 5500, roof: 8000,
-    skirting: 1500, privacy: 1800, posts: 2200,
-  };
-  let subtotal = area * matRate;
-  for (const u of input.upgrades) subtotal += addOnMap[u] ?? 0;
+  const pt = input.projectType as QuoteProjectType;
+  const est = estimateProject({
+    projectType: pt,
+    length: input.dimensions.length,
+    width: input.dimensions.width,
+    material: input.material,
+    style: input.style,
+    upgrades: input.upgrades,
+    corners: input.corners,
+    gates: input.gates,
+  });
 
-  const min = Math.round(subtotal * 0.9);
-  const max = Math.round(subtotal * 1.15);
+  const dimLabel =
+    pt === "fence"
+      ? `${input.dimensions.length} ft run × ${input.dimensions.width} ft height`
+      : `${input.dimensions.length}×${input.dimensions.width} ft (${est.primaryMeasure} ${est.measureLabel})`;
 
   return {
-    estimate: { minUSD: min, maxUSD: max, confidence: "low" },
+    estimate: { minUSD: est.minUSD, maxUSD: est.maxUSD, confidence: "low" },
     breakdown: {
-      materialsUSD: Math.round(subtotal * 0.45),
-      laborUSD: Math.round(subtotal * 0.40),
-      permitsAndFeesUSD: Math.round(subtotal * 0.15),
+      materialsUSD: est.materialsUSD + est.upgradesUSD,
+      laborUSD: est.laborUSD + est.profitUSD,
+      permitsAndFeesUSD: est.permitsUSD,
     },
-    timelineWeeks: { min: Math.max(2, Math.ceil(area / 200)), max: Math.max(4, Math.ceil(area / 120)) },
-    scopeIncludes: [
-      `${input.material === "cedar" ? "Western Red Cedar" : input.material === "composite" ? "TimberTech composite" : "Pressure-treated"} planking`,
-      "Simpson Strong-Tie structural connectors",
-      "Helical pile or engineered concrete footings",
-      "Weather-resistant flashing & moisture barrier",
-      ...input.upgrades,
-    ],
+    timelineWeeks: timelineForType(pt, est.primaryMeasure),
+    scopeIncludes: scopeForType(input),
     riskFactors: [
-      "Slope, access, or hidden rot can push this outside the range.",
+      "Slope, access, or hidden rot/complexity can push this outside the range.",
       "Permit pathway depends on jurisdiction — confirm at site visit.",
-    ],
+      input.projectType === "fence" && (input.gates ?? 0) > 0
+        ? "Gate hardware and post sizing confirmed on site."
+        : "Material pricing subject to Fernie HH PRO desk confirmation.",
+    ].filter(Boolean) as string[],
     regionalNotes:
-      "Standard Kootenay range with 48\" frost-line footings and BC Region 4 snow load assumptions. Final price requires a site visit.",
-    headline: `${input.dimensions.length}×${input.dimensions.width} ${input.material} ${input.projectType} — ballpark estimate`,
+      "East Kootenay pricing anchored to Fernie Home Hardware contractor material costs plus install labor. Final price requires a site visit.",
+    headline: `${input.projectType} — ${dimLabel} ballpark`,
     disclaimer:
-      "Deterministic fallback estimate. AI was unavailable, so we used our base rate card. Final price requires an in-person site visit by Jaryd.",
+      "Deterministic fallback estimate from our rate card. AI was unavailable. Final price requires an in-person site visit by Jaryd.",
   };
 }
 
+function timelineForType(type: QuoteProjectType, measure: number): { min: number; max: number } {
+  if (type === "fence") return { min: 1, max: Math.max(2, Math.ceil(measure / 120)) };
+  if (type === "shed") return { min: 1, max: 2 };
+  if (type === "garage") return { min: 2, max: 4 };
+  if (type === "addition") return { min: 4, max: 10 };
+  return { min: Math.max(1, Math.ceil(measure / 250)), max: Math.max(2, Math.ceil(measure / 150)) };
+}
+
+function scopeForType(input: QuoteInput): string[] {
+  const base: string[] = [];
+  if (input.style) base.push(`Style: ${input.style.replace(/-/g, " ")}`);
+  if (input.projectType === "fence") {
+    base.push(
+      "Posts, rails, and panels per selected style",
+      "Concrete or gravel post footings",
+      ...(input.gates ? [`${input.gates} gate(s)`] : []),
+      ...(input.corners ? [`${input.corners} corner(s)`] : [])
+    );
+  } else if (input.projectType === "deck") {
+    base.push(
+      `${input.material} decking and structural framing`,
+      "Simpson Strong-Tie connectors",
+      "Engineered footings (concrete or helical)"
+    );
+  } else if (input.projectType === "garage" || input.projectType === "shed") {
+    base.push("Framed walls and pitched roof", "Tyvek wrap and sheathing", "Standard entry door");
+  } else if (input.projectType === "pergola") {
+    base.push("Timber posts and beams", "Rafter layout per style", "Concrete pier footings");
+  } else if (input.projectType === "addition") {
+    base.push("Framing package", "Roof tie-in", "Exterior wrap — finish scope per notes");
+  }
+  return [...base, ...input.upgrades].slice(0, 12);
+}
+
 function formatQuoteUserMessage(input: QuoteInput): string {
-  const lines = [
-    `Project type: ${input.projectType}`,
-    `Dimensions: ${input.dimensions.length} ft × ${input.dimensions.width} ft (${
-      input.dimensions.length * input.dimensions.width
-    } sq ft)`,
-    `Material: ${input.material}`,
-    `Upgrades: ${input.upgrades.length ? input.upgrades.join(", ") : "none selected"}`,
-  ];
+  const lines = [`Project type: ${input.projectType}`];
+  if (input.projectType === "fence") {
+    lines.push(
+      `Fence run: ${input.dimensions.length} linear ft`,
+      `Fence height: ${input.dimensions.width} ft`,
+      ...(input.corners !== undefined ? [`Corners: ${input.corners}`] : []),
+      ...(input.gates !== undefined ? [`Gates: ${input.gates}`] : [])
+    );
+  } else {
+    lines.push(
+      `Footprint: ${input.dimensions.length} ft × ${input.dimensions.width} ft (${
+        input.dimensions.length * input.dimensions.width
+      } sq ft)`
+    );
+  }
+  if (input.style) lines.push(`Build style: ${input.style}`);
+  lines.push(`Material preference: ${input.material}`);
+  lines.push(`Upgrades: ${input.upgrades.length ? input.upgrades.join(", ") : "none selected"}`);
   if (input.location) lines.push(`Location: ${input.location}`);
   if (input.notes) lines.push("", "Client notes:", input.notes);
   if ((input.photos?.length ?? 0) > 0) {

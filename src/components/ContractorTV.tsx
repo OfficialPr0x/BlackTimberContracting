@@ -102,7 +102,7 @@ export default function ContractorTV() {
     : others.filter((e) => e.category === activeCategory);
 
   return (
-    <section className="space-y-10" id="tv-section">
+    <div className="space-y-10">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
@@ -337,6 +337,6 @@ export default function ContractorTV() {
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }

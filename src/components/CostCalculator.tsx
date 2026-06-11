@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Calculator, ArrowRight, Sliders, Shield, BadgeDollarSign, Lock, Sparkles, Loader } from "lucide-react";
+import { DECK_UPGRADE_USD, estimateDeck, type DeckUpgrade } from "@/lib/pricing/deck-engine";
 
 interface CostCalculatorProps {
   onTriggerQuote: () => void;
@@ -27,22 +28,7 @@ interface UpgradeState {
   posts: boolean;
 }
 
-const MATERIAL_BASE: Record<Material, number> = {
-  treated: 45,
-  cedar: 65,
-  composite: 85,
-};
-
-const UPGRADE_COSTS: Record<keyof UpgradeState, number> = {
-  stairs: 1800,
-  lighting: 1200,
-  railing: 2500,
-  pergola: 5500,
-  roof: 8000,
-  skirting: 1500,
-  privacy: 1800,
-  posts: 2200,
-};
+const UPGRADE_COSTS = DECK_UPGRADE_USD as Record<keyof UpgradeState, number>;
 
 export default function CostCalculator({ onTriggerQuote }: CostCalculatorProps) {
   const [dimensions, setDimensions] = useState({ length: 20, width: 16 });
@@ -97,35 +83,30 @@ export default function CostCalculator({ onTriggerQuote }: CostCalculatorProps) 
     }
   };
 
-  const rawSubtotal = () => {
-    const area = dimensions.length * dimensions.width;
-    let cost = area * MATERIAL_BASE[material];
-    (Object.keys(upgrades) as (keyof UpgradeState)[]).forEach((k) => {
-      if (upgrades[k]) cost += UPGRADE_COSTS[k];
+  const deckEstimate = () =>
+    estimateDeck({
+      length: dimensions.length,
+      width: dimensions.width,
+      material,
+      upgrades: upgrades as Partial<Record<DeckUpgrade, boolean>>,
     });
-    return cost;
-  };
-  const rawMin = () => Math.round(rawSubtotal() * 0.95);
-  const rawMax = () => Math.round(rawSubtotal() * 1.15);
+
+  const rawMin = () => deckEstimate().minUSD;
+  const rawMax = () => deckEstimate().maxUSD;
 
   const calc = () => {
-    const area = dimensions.length * dimensions.width;
-    const cost = rawSubtotal();
-    // Prefer AI-adjusted range when we have one.
-    const min = aiExplain?.adjustedRangeUSD.min ?? rawMin();
-    const max = aiExplain?.adjustedRangeUSD.max ?? rawMax();
-    const materialCost = Math.round(cost * 0.45);
-    const laborCost = Math.round(cost * 0.40);
-    const permitCost = Math.round(cost * 0.15);
+    const est = deckEstimate();
+    const min = aiExplain?.adjustedRangeUSD.min ?? est.minUSD;
+    const max = aiExplain?.adjustedRangeUSD.max ?? est.maxUSD;
     const fmt = (n: number) =>
       n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
     return {
       min: fmt(min),
       max: fmt(max),
-      area,
-      materialCost: fmt(materialCost),
-      laborCost: fmt(laborCost),
-      permitCost: fmt(permitCost),
+      area: est.areaSqFt,
+      materialCost: fmt(est.materialsUSD + est.upgradesUSD),
+      laborCost: fmt(est.laborUSD + est.profitUSD),
+      permitCost: fmt(est.permitsUSD),
       midpoint: Math.round((min + max) / 2),
     };
   };
@@ -144,8 +125,8 @@ export default function CostCalculator({ onTriggerQuote }: CostCalculatorProps) 
           Real numbers. <span className="text-gold-shimmer">Right now.</span> No email gate.
         </h2>
         <p className="text-sm text-brand-gray leading-relaxed">
-          Move the sliders. Tap the upgrades. Watch the range update in real time —
-          materials, labor, and permits broken out so you can see exactly where the money goes.
+          Move the sliders. Tap the upgrades. Rates are anchored to Fernie HH / Home Hardware
+          material costs plus real install labor — competitive enough to win, priced to profit.
         </p>
       </div>
 
@@ -297,7 +278,7 @@ export default function CostCalculator({ onTriggerQuote }: CostCalculatorProps) 
                 {e.max}
               </div>
               <p className="text-[10px] text-brand-gray leading-relaxed mt-1.5">
-                Updates every time you toggle a slider. Final on-site quote lands inside this range or we eat the difference.
+                Updates every time you toggle a slider. Tight range — final site visit confirms slope, access, and footing type.
               </p>
             </div>
 

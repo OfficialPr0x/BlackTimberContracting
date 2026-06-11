@@ -1,28 +1,32 @@
 /**
  * POST /api/ai/draw-render
  *
- * Body: { sketchDataUrl, template, intent? }
- * Returns: DrawRenderOutput + the matched portfolio photo URL
+ * Body: DrawRenderInput (sketch and/or site photo, template, style, dimensions)
+ * Returns: DrawRenderOutput + generatedMockupUrl (AI concept render)
  *
- * Smart-match path (chosen over true AI image gen for honesty + cost reasons):
- *   1. Vision model interprets the sketch.
- *   2. Same model picks the closest real Black Timber portfolio photo by index.
- *   3. We map the index → real Cloudinary URL and return both.
- *
- * Result: customer sees "this is what we'd actually build that matches your
- * sketch" — real photo, real work, real trust. No hallucinated render to
- * disappoint them later.
+ * Two-step pipeline:
+ *   1. Vision model interprets sketch + site photo + specs.
+ *   2. Image model generates a photorealistic mockup in the client's space.
  */
 
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
 import { chatJSON, type ChatMessage, type ContentPart } from "@/lib/openrouter/client";
-import { DrawRenderInput, DrawRenderOutput, type DrawRenderOutput as DrawRenderOutputT } from "@/lib/openrouter/schemas";
+import { generateImage } from "@/lib/openrouter/generate-image";
+import {
+  DrawRenderInput,
+  DrawRenderOutput,
+  type DrawRenderOutput as DrawRenderOutputT,
+} from "@/lib/openrouter/schemas";
 import { DRAW_RENDER_PROMPT } from "@/lib/openrouter/prompts";
+import {
+  buildMockupPrompt,
+  resolveStyle,
+  type ProjectTemplate,
+} from "@/lib/openrouter/project-styles";
 import { checkRate } from "@/lib/rate-limit";
-import { JOB_PHOTOS, DRAW_RENDER_PHOTOS } from "@/data/jobPhotos";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   try {
@@ -42,36 +46,41 @@ export async function POST(req: Request) {
       throw new AiError({
         code: "invalid_input",
         status: 400,
-        clientMessage: "Sketch data is missing or malformed.",
+        clientMessage: "Sketch or site photo is missing or malformed.",
         message: parsed.error.message,
       });
     }
     const input = parsed.data;
-    const portfolioSize = JOB_PHOTOS.length;
+    const template =
+      input.template === "other" ? "deck" : (input.template as ProjectTemplate);
+    const style = resolveStyle(template, input.style);
 
-    const content: ContentPart[] = [
+    const visionContent: ContentPart[] = [
       {
         type: "text",
-        text: [
-          `Template: ${input.template}`,
-          input.intent ? `Client intent: ${input.intent}` : null,
-          `Portfolio has ${portfolioSize} photos (indices 0..${portfolioSize - 1}).`,
-          "",
-          "Analyze the sketch image below and return STRICT JSON matching the schema.",
-        ]
-          .filter(Boolean)
-          .join("\n"),
+        text: formatVisionUserMessage(input, style.label),
       },
-      { type: "image_url", image_url: { url: input.sketchDataUrl, detail: "high" } },
     ];
+    if (input.sitePhotoDataUrl) {
+      visionContent.push({
+        type: "image_url",
+        image_url: { url: input.sitePhotoDataUrl, detail: "high" },
+      });
+    }
+    if (input.sketchDataUrl) {
+      visionContent.push({
+        type: "image_url",
+        image_url: { url: input.sketchDataUrl, detail: "high" },
+      });
+    }
 
     const messages: ChatMessage[] = [
       { role: "system", content: DRAW_RENDER_PROMPT },
-      { role: "user", content },
+      { role: "user", content: visionContent },
     ];
 
     let aiResult: DrawRenderOutputT;
-    let usedFallback = false;
+    let visionFallback = false;
     try {
       aiResult = await chatJSON({
         task: "sketch",
@@ -81,92 +90,147 @@ export async function POST(req: Request) {
         temperature: 0.3,
       });
     } catch (err) {
-      // AI is unavailable / misconfigured / all models failed validation.
-      // Customer should never see a red error — fall back to a deterministic
-      // template-based portfolio match. Log loudly so we can tune.
       console.warn(
-        `[draw-render] AI failed, returning deterministic fallback for template=${input.template}: ${
+        `[draw-render] Vision failed, using spec-only fallback: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
-      aiResult = deterministicFallback(input.template);
-      usedFallback = true;
+      aiResult = deterministicInterpretation(input, style.label);
+      visionFallback = true;
     }
 
-    // Clamp the portfolio index into a safe range (model might overshoot).
-    const clampedIdx = Math.min(
-      Math.max(0, Math.floor(aiResult.bestPortfolioMatchIndex)),
-      Math.max(0, portfolioSize - 1)
-    );
+    // Merge client-supplied dimensions over vision guesses when provided.
+    if (input.dimensions?.lengthFt) {
+      aiResult.approximateDimensions.length = input.dimensions.lengthFt;
+    }
+    if (input.dimensions?.widthFt) {
+      aiResult.approximateDimensions.width = input.dimensions.widthFt;
+    }
+
+    const mockupPrompt = buildMockupPrompt({
+      template,
+      style,
+      lengthFt: input.dimensions?.lengthFt ?? aiResult.approximateDimensions.length,
+      widthFt: input.dimensions?.widthFt ?? aiResult.approximateDimensions.width,
+      corners: input.dimensions?.corners,
+      gates: input.dimensions?.gates,
+      intent: input.intent,
+      interpretation: aiResult.interpretation,
+      detectedFeatures: aiResult.detectedFeatures,
+      hasSitePhoto: Boolean(input.sitePhotoDataUrl),
+      hasSketch: Boolean(input.sketchDataUrl),
+    });
+
+    const imageMessages: ChatMessage[] = [
+      {
+        role: "user",
+        content: buildImageGenContent(mockupPrompt, input),
+      },
+    ];
+
+    let generatedMockupUrl: string | null = null;
+    let imageModel: string | undefined;
+    let imageFallback = false;
+
+    try {
+      const img = await generateImage({
+        task: "mockup",
+        messages: imageMessages,
+        aspectRatio: "16:9",
+      });
+      generatedMockupUrl = img.imageDataUrl;
+      imageModel = img.model;
+    } catch (err) {
+      console.warn(
+        `[draw-render] Image gen failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      imageFallback = true;
+    }
+
+    if (!generatedMockupUrl) {
+      throw new AiError({
+        code: "upstream_failed",
+        status: 502,
+        clientMessage:
+          "We couldn't generate your mockup right now. Please try again in a moment — or call 250-910-9071.",
+        message: "Image generation returned no result",
+      });
+    }
 
     return Response.json({
       ...aiResult,
-      bestPortfolioMatchIndex: clampedIdx,
-      bestPortfolioMatchUrl: JOB_PHOTOS[clampedIdx],
-      usedFallback,
+      generatedMockupUrl,
+      styleLabel: style.label,
+      visionFallback,
+      imageFallback,
+      imageModel,
+      isConceptRender: true,
     });
   } catch (err) {
-    // Only validation / rate-limit errors reach here — those SHOULD be visible.
     return errorResponse(err);
   }
 }
 
-/**
- * Deterministic fallback when AI is unavailable. Picks a real portfolio photo
- * matched to the template and returns honest copy that doesn't pretend to be
- * AI-generated. Customer still gets a useful UI; no red error banner.
- */
-function deterministicFallback(template: DrawRenderInput["template"]): DrawRenderOutputT {
-  const templateMap: Record<DrawRenderInput["template"], number> = {
-    deck: 0,
-    fence: 1,
-    garage: 2,
-    pergola: 3,
-    other: 0,
-  };
-  const fallbackUrl = DRAW_RENDER_PHOTOS[templateMap[template]] ?? JOB_PHOTOS[0];
-  // Resolve the URL back to an index in the master JOB_PHOTOS list.
-  const idx = Math.max(0, JOB_PHOTOS.indexOf(fallbackUrl));
+function formatVisionUserMessage(
+  input: DrawRenderInput,
+  styleLabel: string
+): string {
+  const lines = [
+    `Template: ${input.template}`,
+    `Selected style: ${styleLabel}`,
+  ];
+  const d = input.dimensions;
+  if (d) {
+    const parts: string[] = [];
+    if (d.lengthFt) parts.push(`length/run: ${d.lengthFt} ft`);
+    if (d.widthFt) parts.push(`width/depth: ${d.widthFt} ft`);
+    if (d.corners !== undefined) parts.push(`corners: ${d.corners}`);
+    if (d.gates !== undefined) parts.push(`gates: ${d.gates}`);
+    if (parts.length) lines.push(`Client dimensions: ${parts.join(", ")}`);
+  }
+  if (input.intent) lines.push(`Client intent: ${input.intent}`);
+  if (input.sitePhotoDataUrl) lines.push("Site photo attached — analyze the yard/space.");
+  if (input.sketchDataUrl) lines.push("Client sketch attached — read the layout geometry.");
+  lines.push("", "Analyze the attached image(s) and return STRICT JSON matching the schema.");
+  return lines.join("\n");
+}
 
-  const copy: Record<DrawRenderInput["template"], { interp: string; reason: string; feats: string[]; upgrades: string[] }> = {
-    deck: {
-      interp: "We couldn't read your sketch in full detail right now — here's a recent Black Timber deck build that hits similar geometry to use as inspiration.",
-      reason: "Pulled from the portfolio as a close match by template type.",
-      feats: ["timber posts", "deck surface", "stairs"],
-      upgrades: ["LED post-cap lighting", "black aluminum railing", "cedar skirting"],
-    },
-    fence: {
-      interp: "We couldn't read your sketch in full detail right now — here's a Black Timber fence build that fits the template you picked.",
-      reason: "Pulled from the portfolio as a close match by template type.",
-      feats: ["fence panels", "top rail", "posts"],
-      upgrades: ["lattice top", "stained finish", "gate hardware upgrade"],
-    },
-    garage: {
-      interp: "We couldn't read your sketch in full detail right now — here's a Black Timber garage / outbuilding build matching the template.",
-      reason: "Pulled from the portfolio as a close match by template type.",
-      feats: ["framed walls", "pitched roof", "garage door"],
-      upgrades: ["insulated overhead door", "side entry door", "metal roofing"],
-    },
-    pergola: {
-      interp: "We couldn't read your sketch in full detail right now — here's a Black Timber pergola build matching the template.",
-      reason: "Pulled from the portfolio as a close match by template type.",
-      feats: ["timber posts", "main beam", "cross rafters"],
-      upgrades: ["louvered top", "integrated lighting", "privacy panel"],
-    },
-    other: {
-      interp: "We couldn't read your sketch in full detail right now — here's a recent Black Timber build as a reference.",
-      reason: "Pulled from the portfolio.",
-      feats: ["custom structure"],
-      upgrades: [],
-    },
-  };
-  const c = copy[template];
+function buildImageGenContent(
+  prompt: string,
+  input: DrawRenderInput
+): ContentPart[] {
+  const parts: ContentPart[] = [{ type: "text", text: prompt }];
+  // Site photo first — primary reference for in-space compositing.
+  if (input.sitePhotoDataUrl) {
+    parts.push({
+      type: "image_url",
+      image_url: { url: input.sitePhotoDataUrl, detail: "high" },
+    });
+  }
+  if (input.sketchDataUrl) {
+    parts.push({
+      type: "image_url",
+      image_url: { url: input.sketchDataUrl, detail: "high" },
+    });
+  }
+  return parts;
+}
+
+function deterministicInterpretation(
+  input: DrawRenderInput,
+  styleLabel: string
+): DrawRenderOutputT {
+  const d = input.dimensions;
   return {
-    interpretation: c.interp,
-    detectedFeatures: c.feats,
-    approximateDimensions: { length: 0, width: 0, notes: "scale not visible" },
-    bestPortfolioMatchIndex: idx,
-    matchReason: c.reason,
-    recommendedUpgrades: c.upgrades,
+    interpretation: `Concept mockup for a ${styleLabel} ${input.template} based on your specs and layout.`,
+    detectedFeatures: [input.template, styleLabel],
+    approximateDimensions: {
+      length: d?.lengthFt ?? 0,
+      width: d?.widthFt ?? 0,
+      notes: d?.lengthFt ? "from client input" : "scale not visible",
+    },
+    designNotes:
+      "AI vision was unavailable — mockup generated from your selected style and dimensions.",
+    recommendedUpgrades: [],
   };
 }

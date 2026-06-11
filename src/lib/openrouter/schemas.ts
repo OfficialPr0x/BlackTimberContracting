@@ -17,10 +17,10 @@ import { z } from "zod";
 // =============================================================================
 
 export const QuoteInput = z.object({
-  projectType: z.enum(["deck", "pergola", "garage", "addition", "fence", "other"]),
+  projectType: z.enum(["deck", "pergola", "garage", "shed", "addition", "fence", "other"]),
   dimensions: z.object({
-    length: z.number().min(4).max(80),
-    width: z.number().min(4).max(80),
+    length: z.number().min(4).max(500),
+    width: z.number().min(3).max(80),
   }),
   material: z.enum(["treated", "cedar", "composite", "other"]),
   upgrades: z.array(z.string()).max(20),
@@ -38,6 +38,11 @@ export const QuoteInput = z.object({
     .default([]),
   // Free-form site location string. Used for Kootenay-specific reasoning.
   location: z.string().max(200).optional(),
+  // Style id from project-styles (fence, garage, pergola, etc.).
+  style: z.string().max(80).optional(),
+  // Fence-specific — length = run (ft), width = height (ft) in dimensions.
+  corners: z.number().int().min(0).max(20).optional(),
+  gates: z.number().int().min(0).max(10).optional(),
 });
 export type QuoteInput = z.infer<typeof QuoteInput>;
 
@@ -107,13 +112,29 @@ export type SiteIntelOutput = z.infer<typeof SiteIntelOutput>;
 // /api/ai/draw-render
 // =============================================================================
 
-export const DrawRenderInput = z.object({
-  // Canvas PNG as a data URL (data:image/png;base64,...).
-  sketchDataUrl: z.string().startsWith("data:image/").max(8_000_000),
-  template: z.enum(["deck", "fence", "garage", "pergola", "other"]).default("deck"),
-  // Optional free-form intent from the client ("make it L-shaped, hot tub corner").
-  intent: z.string().max(500).optional(),
-});
+export const DrawRenderInput = z
+  .object({
+    // Canvas PNG as a data URL (data:image/png;base64,...).
+    sketchDataUrl: z.string().startsWith("data:image/").max(8_000_000).optional(),
+    // Client's yard / space photo to composite the mockup into.
+    sitePhotoDataUrl: z.string().startsWith("data:image/").max(8_000_000).optional(),
+    template: z.enum(["deck", "fence", "garage", "pergola", "other"]).default("deck"),
+    // Style id from project-styles catalog (e.g. "chainlink", "cedar", "friendly-neighbor").
+    style: z.string().max(80).optional(),
+    dimensions: z
+      .object({
+        lengthFt: z.number().min(0).max(500).optional(),
+        widthFt: z.number().min(0).max(200).optional(),
+        corners: z.number().int().min(0).max(20).optional(),
+        gates: z.number().int().min(0).max(10).optional(),
+      })
+      .optional(),
+    // Optional free-form intent from the client ("make it L-shaped, hot tub corner").
+    intent: z.string().max(500).optional(),
+  })
+  .refine((d) => d.sketchDataUrl || d.sitePhotoDataUrl, {
+    message: "Provide a sketch and/or a site photo.",
+  });
 export type DrawRenderInput = z.infer<typeof DrawRenderInput>;
 
 // Notes on min/max constraints: we keep upper bounds tight (anti-abuse,
@@ -128,9 +149,7 @@ export const DrawRenderOutput = z.object({
     width: z.number().min(0).max(80),
     notes: z.string().max(200).optional(),
   }),
-  // Which portfolio photo index best matches. Server clamps into range.
-  bestPortfolioMatchIndex: z.number().int().min(0).max(999),
-  matchReason: z.string().min(1).max(400),
+  designNotes: z.string().min(1).max(400),
   recommendedUpgrades: z.array(z.string()).max(6).default([]),
 });
 export type DrawRenderOutput = z.infer<typeof DrawRenderOutput>;

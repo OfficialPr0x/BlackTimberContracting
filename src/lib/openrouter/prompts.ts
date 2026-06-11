@@ -45,9 +45,10 @@ upgrades), possibly photos of the yard or a sketch, and possibly free-form notes
 How to think:
   1. Read every photo carefully. Look for slope, existing structures the deck
      will attach to (ledger boards), access constraints, drainage clues.
-  2. Apply realistic 2026 BC labor + material rates. Cedar is roughly $65/sqft
-     installed for a baseline deck; composite is ~$85/sqft; pressure-treated is
-     ~$45/sqft. Adjust UP for: helical piles, multi-level builds, >30° slope,
+  2. Apply realistic 2026 BC labor + material rates anchored to Fernie HH PRO /
+     Home Hardware contractor pricing. Competitive installed ballparks: cedar
+     ~$32/sqft baseline; composite ~$42/sqft; pressure-treated ~$26/sqft.
+     Adjust UP for: helical piles, multi-level builds, >30° slope,
      remote access, custom railings, or photos showing rot/hidden complexity.
   3. Cross-check the materials half of the estimate against the Fernie HH
      ballparks above. Use them to anchor the materialsUSD line in the
@@ -110,22 +111,21 @@ Output: STRICT JSON matching the schema. No prose outside JSON.
 export const DRAW_RENDER_PROMPT = `
 ${BRAND_PRIMER}
 
-Task: a client has sketched a project on a digital canvas. You will receive
-the canvas as an image. Tell us:
+Task: a client is designing a deck, fence, garage, or pergola project. You may
+receive a hand-drawn sketch, a photo of their yard, or both — plus dimensions and
+style notes in the text. Tell us:
 
-  1. What you see — be honest. "Rough rectangular deck about 16×12 with one
-     set of stairs and three posts" is great. Do not pretend they sketched
-     more detail than they did.
-  2. Approximate dimensions from the sketch's proportions and any reference
-     marks visible. If you cannot tell, return 0/0 and note "scale not visible".
-  3. Detected features: list the structural elements visible (posts, beams,
-     rails, stairs, pergola top, etc.).
-  4. Which portfolio photo would best match what they drew. You will be told
-     how many photos are in the portfolio (length); return an integer index
-     0..length-1. Pick the one that genuinely matches geometry — NOT just the
-     most impressive photo.
-  5. Why it matches — one or two honest sentences.
-  6. Recommended upgrades to consider given what they drew.
+  1. What you see — be honest. "Rough L-shaped fence with two corners and a gate
+     opening on the south side" is great. Do not pretend they provided more
+     detail than they did.
+  2. Approximate dimensions: use client-supplied ft measurements when given;
+     otherwise infer from sketch proportions. If you cannot tell, return 0/0
+     and note "scale not visible".
+  3. Detected features: list structural elements (posts, corners, gates, beams,
+     rails, stairs, roof pitch, pergola rafters, etc.).
+  4. designNotes: one or two sentences on how this layout would be built and
+     what to watch for (slope, setbacks, gate swing, etc.).
+  5. Recommended upgrades to consider given what they drew or photographed.
 
 Output: STRICT JSON matching the schema. No prose outside JSON.
 `.trim();
@@ -369,9 +369,22 @@ Filing conventions (vault + quotes):
 
 Vault & e-sign actions (JSON):
   - create_folder: { type, name, parentFolderName? }
-  - create_markdown: { type, name, content, parentFolderName? } — logs, GST summaries, receipt write-ups
+  - create_markdown: { type, name, content, parentFolderName? } — logs, GST summaries (no receipt photos)
   - archive_document: { type, documentId, parentFolderName? } — accurate quote/invoice snapshot
   - create_esign: { type, documentId, sendNow?, signerEmail?, signerName?, signerMessage? } — client signing portal + Resend emails
+  - file_bookkeeping_record: { type, fileId, parentFolderName, imageName?, recordName, recordContent }
+      When Jaryd attaches receipt/photo screenshots: READ the image (vision), categorize, rename the
+      image, and save a markdown write-up beside it. fileId MUST be one of the attachment UUIDs listed
+      in the prompt. Use parentFolderName:
+        Receipts — supplier receipts, fuel, materials, hardware, takeout job expenses
+        Bank & Deposits — e-transfer screenshots, deposit slips, bank confirmations
+        Tax & GST — CRA/GST/PST paperwork
+        Subcontractors — sub trade invoices, COIs
+        Notes — job-site photos, unclear docs pending review
+      recordName like YYYY-MM-DD-vendor-short.md; imageName like YYYY-MM-DD-vendor.jpg
+      recordContent markdown: ## Summary, ## Vendor, ## Date, ## Category, ## Amounts (CAD subtotal,
+      GST, PST, total — only if visible; else "not shown"), ## Payment method, ## Bookkeeping notes,
+      ## Source image (exact imageName). Never invent dollar amounts not visible in the image.
   - parentFolderName must match the vault tree (e.g. Receipts, Quotes & Invoices).
 `.trim();
 
@@ -426,7 +439,7 @@ Output: strict JSON only (ProspectSearchOutput schema).
 export const PROMPT_VERSIONS = {
   quote: "quote.v2",
   intel: "intel.v1",
-  sketch: "sketch.v1",
+  sketch: "sketch.v2",
   explain: "explain.v2",
   concierge: "concierge.v2",
   admin_suggest: "admin_suggest.v2",

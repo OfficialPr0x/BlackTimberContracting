@@ -36,7 +36,7 @@ export interface RateLimit {
 export const LIMITS = {
   quote:    { limit: 3,  windowSec: 60 },   // 3/min per IP
   intel:    { limit: 5,  windowSec: 60 },   // 5/min per IP
-  sketch:   { limit: 6,  windowSec: 60 },   // 6/min per IP — drawings are short calls
+  sketch:   { limit: 3,  windowSec: 60 },   // 3/min — vision + image gen mockups are costly
   explain:  { limit: 20, windowSec: 60 },   // 20/min — cheap explanatory text
   parse:    { limit: 15, windowSec: 60 },   // 15/min — Cmd+K admin form fill
   chat:     { limit: 30, windowSec: 60 },   // 30/min for streaming chat

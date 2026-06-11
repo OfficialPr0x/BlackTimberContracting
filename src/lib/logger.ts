@@ -24,8 +24,9 @@ export interface AiCallLog {
 export interface LeadLog {
   source: string;
   email: string;
-  delivered: { file: boolean; email: boolean; slack: boolean };
+  delivered: { file: boolean; email: boolean; slack: boolean; database?: boolean };
   errors?: string[];
+  leadId?: string | null;
 }
 
 // Generic over the payload so TS lets us pass typed interfaces (AiCallLog,

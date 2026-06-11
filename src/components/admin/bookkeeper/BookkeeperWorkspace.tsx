@@ -21,6 +21,8 @@ import {
   MessageSquare,
   Pencil,
   FolderInput,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import Markdown from "@/components/Markdown";
 import SpreadsheetViewer from "./SpreadsheetViewer";
@@ -65,6 +67,25 @@ function isDescendantFolder(nodes: FileTreeNode[], ancestorId: string, targetId:
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
+  attachmentNames?: string[];
+}
+
+interface ChatAttachment {
+  id: string;
+  name: string;
+  previewUrl: string | null;
+}
+
+function findFolderIdByName(nodes: FileTreeNode[], name: string): string | null {
+  const needle = name.toLowerCase();
+  for (const n of nodes) {
+    if (n.kind === "folder" && n.name.toLowerCase() === needle) return n.id;
+    if (n.kind === "folder") {
+      const hit = findFolderIdByName(n.children, name);
+      if (hit) return hit;
+    }
+  }
+  return null;
 }
 
 function TreeRow({
@@ -150,10 +171,18 @@ export default function BookkeeperWorkspace() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatPending, setChatPending] = useState(false);
+  const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
+  const [chatUploading, setChatUploading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [moveTarget, setMoveTarget] = useState<string>("");
   const uploadRef = useRef<HTMLInputElement>(null);
+  const chatUploadRef = useRef<HTMLInputElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  const defaultUploadFolderId = useMemo(
+    () => selectedFolderId ?? findFolderIdByName(tree, "Receipts"),
+    [selectedFolderId, tree]
+  );
 
   const selectedNode = useMemo(
     () => (selectedId ? findTreeNode(tree, selectedId) : null),
@@ -393,23 +422,81 @@ export default function BookkeeperWorkspace() {
     }
   };
 
+  const uploadChatImages = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      if (!list.length) return;
+      if (chatAttachments.length + list.length > 4) {
+        setError("Max 4 photos per message.");
+        return;
+      }
+      setChatUploading(true);
+      setError(null);
+      try {
+        const added: ChatAttachment[] = [];
+        for (const img of list.slice(0, 4 - chatAttachments.length)) {
+          const previewUrl = URL.createObjectURL(img);
+          const fd = new FormData();
+          fd.append("file", img);
+          if (defaultUploadFolderId) fd.append("parentId", defaultUploadFolderId);
+          const res = await fetch("/api/admin/files/upload", { method: "POST", body: fd });
+          const body = await res.json();
+          if (!res.ok) throw new Error(body?.error?.message ?? "Photo upload failed");
+          added.push({
+            id: body.id as string,
+            name: (body.name as string) ?? img.name,
+            previewUrl,
+          });
+        }
+        setChatAttachments((prev) => [...prev, ...added]);
+        await refreshTree();
+        setMobilePane("chat");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Photo upload failed");
+      } finally {
+        setChatUploading(false);
+        if (chatUploadRef.current) chatUploadRef.current.value = "";
+      }
+    },
+    [chatAttachments.length, defaultUploadFolderId, refreshTree]
+  );
+
+  const removeChatAttachment = (id: string) => {
+    setChatAttachments((prev) => {
+      const hit = prev.find((a) => a.id === id);
+      if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  };
+
   const sendChat = async () => {
     const text = chatInput.trim();
-    if (!text || chatPending) return;
+    if ((!text && chatAttachments.length === 0) || chatPending || chatUploading) return;
     setChatInput("");
-    const convo: ChatMsg[] = [...messages, { role: "user", content: text }];
+    const attachmentNames = chatAttachments.map((a) => a.name);
+    const convo: ChatMsg[] = [
+      ...messages,
+      {
+        role: "user",
+        content: text || "(Photo for bookkeeping)",
+        attachmentNames: attachmentNames.length ? attachmentNames : undefined,
+      },
+    ];
+    const attachmentIds = chatAttachments.map((a) => a.id);
     setMessages(convo);
     setChatPending(true);
     setError(null);
 
     try {
-      const contextFileIds = file?.kind === "file" ? [file.id] : [];
+      const contextFileIds =
+        file?.kind === "file" && !attachmentIds.includes(file.id) ? [file.id] : [];
       const res = await fetch("/api/admin/bookkeeper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: convo,
+          messages: convo.map(({ role, content }) => ({ role, content })),
           contextFileIds,
+          attachmentFileIds: attachmentIds.length ? attachmentIds : undefined,
           selectedFolderId: selectedFolderId,
         }),
       });
@@ -421,14 +508,41 @@ export default function BookkeeperWorkspace() {
       const reply = body.reply as string;
       setMessages([...convo, { role: "assistant", content: reply }]);
 
-      const created = body.created as Array<{ type: string; id: string; name: string }> | undefined;
+      chatAttachments.forEach((a) => {
+        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      });
+      setChatAttachments([]);
+
+      const created = body.created as
+        | Array<{ type: string; id: string; name: string; imageId?: string; parentFolderName?: string }>
+        | undefined;
       if (created?.length) {
-        await syncQuotesToVault().catch(() => refreshTree());
+        await syncQuotesToVault().catch(() => undefined);
+        const nodes = await refreshTree();
+        const filed = created.find((c) => c.type === "file_bookkeeping_record");
         const md = created.find(
-          (c) => c.type === "create_markdown" || c.type === "archive_document"
+          (c) =>
+            c.type === "create_markdown" ||
+            c.type === "archive_document" ||
+            c.type === "file_bookkeeping_record"
         );
-        if (md) await loadFile(md.id);
-        else {
+        if (md) {
+          await loadFile(md.id);
+          if (filed?.parentFolderName) {
+            const folderId = nodes.find(
+              (n) =>
+                n.kind === "folder" &&
+                n.name.toLowerCase() === filed.parentFolderName!.toLowerCase()
+            )?.id;
+            if (folderId) {
+              setSelectedFolderId(folderId);
+              setSelectedId(md.id);
+              setExpanded((prev) => new Set(prev).add(folderId));
+            }
+          }
+        } else if (filed?.imageId) {
+          await loadFile(filed.imageId);
+        } else {
           const folder = created.find((c) => c.type === "create_folder");
           if (folder) {
             setSelectedFolderId(folder.id);
@@ -736,8 +850,8 @@ export default function BookkeeperWorkspace() {
       >
         {messages.length === 0 ? (
           <p className="text-xs text-brand-gray">
-            Ask about open invoices, match deposits, or say &quot;archive I-20260604-AB3C to
-            Quotes &amp; Invoices&quot; — I see your live quote register and can file vault notes.
+            Attach receipt photos (📷) — AI reads them, files the image, and writes a categorized
+            markdown record. Or ask about invoices, deposits, and GST.
           </p>
         ) : (
           messages.map((m, i) => (
@@ -752,7 +866,18 @@ export default function BookkeeperWorkspace() {
               {m.role === "assistant" && m.content ? (
                 <Markdown>{m.content}</Markdown>
               ) : m.role === "user" ? (
-                <span className="text-white whitespace-pre-wrap">{m.content}</span>
+                <div className="space-y-1">
+                  {m.attachmentNames?.length ? (
+                    <p className="text-[10px] font-mono text-brand-gold/90 flex flex-wrap gap-1">
+                      {m.attachmentNames.map((n) => (
+                        <span key={n} className="inline-flex items-center gap-0.5">
+                          <ImageIcon className="w-3 h-3" /> {n}
+                        </span>
+                      ))}
+                    </p>
+                  ) : null}
+                  <span className="text-white whitespace-pre-wrap">{m.content}</span>
+                </div>
               ) : (
                 <span className="inline-flex items-center gap-2 text-brand-gray">
                   <Loader className="w-3 h-3 animate-spin" /> Thinking…
@@ -762,18 +887,87 @@ export default function BookkeeperWorkspace() {
           ))
         )}
       </div>
+      {chatAttachments.length > 0 ? (
+        <div className="shrink-0 px-2 py-1.5 border-t border-brand-border flex flex-wrap gap-2 bg-brand-black/40">
+          {chatAttachments.map((a) => (
+            <div
+              key={a.id}
+              className="relative w-14 h-14 rounded-lg border border-brand-gold/40 overflow-hidden bg-brand-charcoal"
+            >
+              {a.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={a.previewUrl} alt={a.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageIcon className="w-5 h-5 text-brand-gray" />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => removeChatAttachment(a.id)}
+                className="absolute top-0.5 right-0.5 p-0.5 rounded bg-black/70 text-white hover:text-red-300"
+                title="Remove"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className="shrink-0 p-2 border-t border-brand-border flex gap-2 bg-brand-charcoal/80">
+        <button
+          type="button"
+          title="Attach receipt photo"
+          disabled={chatUploading || chatAttachments.length >= 4}
+          onClick={() => chatUploadRef.current?.click()}
+          className="shrink-0 p-2 rounded-lg border border-brand-gold/40 text-brand-gold hover:bg-brand-gold/10 disabled:opacity-40"
+        >
+          {chatUploading ? (
+            <Loader className="w-4 h-4 animate-spin" />
+          ) : (
+            <ImagePlus className="w-4 h-4" />
+          )}
+        </button>
+        <input
+          ref={chatUploadRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          className="hidden"
+          onChange={(e) => void uploadChatImages(e.target.files ?? [])}
+        />
         <input
           value={chatInput}
           onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void sendChat()}
-          placeholder="Ask the bookkeeper…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void sendChat();
+            }
+          }}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            const imgs: File[] = [];
+            for (const item of items) {
+              if (item.type.startsWith("image/")) {
+                const f = item.getAsFile();
+                if (f) imgs.push(f);
+              }
+            }
+            if (imgs.length) {
+              e.preventDefault();
+              void uploadChatImages(imgs);
+            }
+          }}
+          placeholder="Ask or attach a receipt photo…"
           className="flex-1 bg-brand-black border border-brand-border rounded-lg px-3 py-2 text-sm text-white focus:border-brand-gold outline-none"
         />
         <button
           type="button"
           onClick={() => void sendChat()}
-          disabled={chatPending}
+          disabled={chatPending || chatUploading || (!chatInput.trim() && chatAttachments.length === 0)}
           className="px-3 py-2 rounded-lg bg-brand-gold text-brand-black text-xs font-mono uppercase font-bold disabled:opacity-50"
         >
           Send

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Upload,
   Clock,
@@ -11,12 +11,22 @@ import {
   AlertTriangle,
   Sparkles,
   Loader,
+  Download,
 } from "lucide-react";
+import {
+  estimateProject,
+  PROJECT_TYPE_OPTIONS,
+  type QuoteProjectType,
+} from "@/lib/pricing/quote-engine";
+import { buildEstimateDocument } from "@/lib/pricing/estimate-lines";
+import { PROJECT_STYLES } from "@/lib/openrouter/project-styles";
+import WebsiteEstimatePrint from "@/components/WebsiteEstimatePrint";
 
 interface QuoteWizardProps {
   isOpen: boolean;
   onClose: () => void;
   initialType?: string;
+  initialStep?: number;
 }
 
 const STEPS = [
@@ -45,14 +55,50 @@ interface AiQuoteResult {
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
-export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: QuoteWizardProps) {
-  const [step, setStep] = useState(1);
-  const [projectType, setProjectType] = useState(initialType);
+export default function QuoteWizard({
+  isOpen,
+  onClose,
+  initialType = "deck",
+  initialStep = 1,
+}: QuoteWizardProps) {
+  const [step, setStep] = useState(initialStep);
+  const [projectType, setProjectType] = useState<QuoteProjectType>(
+    (initialType as QuoteProjectType) || "deck"
+  );
   const [dimensions, setDimensions] = useState({ length: 16, width: 12 });
   const [material, setMaterial] = useState("cedar");
+  const [style, setStyle] = useState("cedar");
+  const [corners, setCorners] = useState(0);
+  const [gates, setGates] = useState(0);
+  const [location, setLocation] = useState("");
   const [upgrades, setUpgrades] = useState<string[]>([]);
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setStep(initialStep);
+      setProjectType((initialType as QuoteProjectType) || "deck");
+    }
+  }, [isOpen, initialStep, initialType]);
+
+  const selectProjectType = (id: QuoteProjectType) => {
+    setProjectType(id);
+    setUpgrades([]);
+    setAiResult(null);
+    setAiError(null);
+    const defaults = DEFAULTS_BY_TYPE[id];
+    setDimensions(defaults.dimensions);
+    setStyle(defaults.style);
+    setCorners(defaults.corners ?? 0);
+    setGates(defaults.gates ?? 0);
+    if (id === "deck") setMaterial("cedar");
+  };
+  const [sessionId] = useState(() =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `wiz-${Date.now()}`
+  );
   const [bookingDate, setBookingDate] = useState("");
   const [bookingTime, setBookingTime] = useState("");
   const [contactInfo, setContactInfo] = useState({ name: "", email: "", phone: "", address: "" });
@@ -60,6 +106,8 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingPending, setBookingPending] = useState(false);
   const [website, setWebsite] = useState(""); // honeypot
+  const [estimateSaved, setEstimateSaved] = useState(false);
+  const [savedLeadId, setSavedLeadId] = useState<string | null>(null);
 
   // AI analysis state
   const [aiResult, setAiResult] = useState<AiQuoteResult | null>(null);
@@ -110,8 +158,12 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
             projectType,
             dimensions,
             material,
+            style: style || undefined,
+            corners: projectType === "fence" ? corners : undefined,
+            gates: projectType === "fence" ? gates : undefined,
             upgrades,
             notes: notes || undefined,
+            location: location || undefined,
             photos: photos.map((p) => ({ url: p.dataUrl, kind: "yard" })),
           }),
         });
@@ -143,6 +195,94 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
+  const estimateDocument = useMemo(
+    () =>
+      buildEstimateDocument(
+        {
+          projectType,
+          length: dimensions.length,
+          width: dimensions.width,
+          material,
+          style,
+          upgrades,
+          corners,
+          gates,
+        },
+        aiResult
+          ? {
+              headline: aiResult.headline,
+              disclaimer: aiResult.disclaimer,
+              scopeIncludes: aiResult.scopeIncludes,
+              minUSD: aiResult.estimate.minUSD,
+              maxUSD: aiResult.estimate.maxUSD,
+            }
+          : undefined
+      ),
+    [projectType, dimensions, material, style, upgrades, corners, gates, aiResult]
+  );
+
+  useEffect(() => {
+    if (!isOpen || step !== 4 || estimateSaved) return;
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: "quote_wizard",
+            contact: {
+              name: "Website Visitor",
+              email: `estimate+${sessionId.replace(/-/g, "").slice(0, 16)}@inquiry.blacktimbercontracting.com`,
+            },
+            website: "",
+            payload: {
+              stage: "estimate_generated",
+              sessionId,
+              tags: ["quote-wizard", "estimate-generated"],
+              projectType,
+              dimensions,
+              material,
+              style,
+              corners: projectType === "fence" ? corners : undefined,
+              gates: projectType === "fence" ? gates : undefined,
+              location,
+              upgrades,
+              notes,
+              photoCount: photos.length,
+              estimateDocument,
+              aiQuote: aiResult ?? null,
+            },
+          }),
+        });
+        if (res.ok) {
+          const body = (await res.json()) as { leadId?: string };
+          if (body.leadId) setSavedLeadId(body.leadId);
+          setEstimateSaved(true);
+        }
+      } catch {
+        /* non-blocking */
+      }
+    })();
+  }, [
+    isOpen,
+    step,
+    estimateSaved,
+    sessionId,
+    projectType,
+    dimensions,
+    material,
+    style,
+    corners,
+    gates,
+    location,
+    upgrades,
+    notes,
+    photos.length,
+    estimateDocument,
+    aiResult,
+  ]);
+
   if (!isOpen) return null;
 
   const toggleUpgrade = (id: string) => {
@@ -166,37 +306,46 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
   };
 
   // Deterministic fallback (still useful when AI errors or as initial estimate).
+  const runEstimate = () =>
+    estimateProject({
+      projectType,
+      length: dimensions.length,
+      width: dimensions.width,
+      material,
+      style,
+      upgrades,
+      corners,
+      gates,
+    });
+
   const fallbackPrice = () => {
-    const area = dimensions.length * dimensions.width;
-    let basePricePerSqFt = 45;
-    if (material === "cedar") basePricePerSqFt = 65;
-    if (material === "composite") basePricePerSqFt = 85;
-
-    let subtotal = area * basePricePerSqFt;
-    if (upgrades.includes("stairs")) subtotal += 1800;
-    if (upgrades.includes("lighting")) subtotal += 1200;
-    if (upgrades.includes("railing")) subtotal += 2500;
-    if (upgrades.includes("pergola")) subtotal += 5500;
-    if (upgrades.includes("roof")) subtotal += 8000;
-
-    const min = Math.round(subtotal * 0.9);
-    const max = Math.round(subtotal * 1.15);
-    return { min, max, area };
+    const est = runEstimate();
+    return {
+      min: est.minUSD,
+      max: est.maxUSD,
+      measure: est.primaryMeasure,
+      measureLabel: est.measureLabel,
+    };
   };
 
-  // Resolve which numbers to display in step 4 — AI if we got one, fallback otherwise.
   const displayQuote = (() => {
+    const est = runEstimate();
     if (aiResult) {
       return {
         min: aiResult.estimate.minUSD,
         max: aiResult.estimate.maxUSD,
-        area: dimensions.length * dimensions.width,
+        measure: est.primaryMeasure,
+        measureLabel: est.measureLabel,
         source: "ai" as const,
       };
     }
     const fb = fallbackPrice();
     return { ...fb, source: "fallback" as const };
   })();
+
+  const dimConfig = DIMENSION_CONFIG[projectType];
+  const upgradeOptions = UPGRADES_BY_TYPE[projectType] ?? [];
+  const styleOptions = STYLE_OPTIONS_FOR_TYPE(projectType);
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,25 +364,38 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
             phone: contactInfo.phone,
             address: contactInfo.address || undefined,
           },
-          website, // honeypot — server drops if non-empty
+          website,
           payload: {
+            stage: "booked",
+            sessionId,
+            tags: ["quote-wizard", "consultation-booked"],
+            relatedLeadId: savedLeadId,
             projectType,
             dimensions,
             material,
+            style,
+            corners: projectType === "fence" ? corners : undefined,
+            gates: projectType === "fence" ? gates : undefined,
+            location,
             upgrades,
             notes,
             preferredDate: bookingDate,
             preferredTime: bookingTime,
             photoCount: photos.length,
+            estimateDocument,
             aiQuote: aiResult ?? null,
             fallbackQuote: aiResult ? null : fallbackPrice(),
           },
         }),
       });
+      const body = (await res.json().catch(() => ({}))) as {
+        leadId?: string;
+        error?: { message?: string };
+      };
       if (!res.ok) {
-        const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
         throw new Error(body?.error?.message ?? `Submission failed (${res.status})`);
       }
+      if (body.leadId) setSavedLeadId(body.leadId);
       setIsBooked(true);
     } catch (err) {
       setBookingError(err instanceof Error ? err.message : "Submission failed");
@@ -243,7 +405,8 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in print:hidden">
       <div className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-brand-border bg-brand-charcoal text-left shadow-2xl flex flex-col max-h-[90vh]">
 
         {/* Header */}
@@ -307,122 +470,205 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
             <div className="space-y-6 animate-slide-up">
               <div>
                 <h3 className="text-lg font-bold text-foreground uppercase tracking-wide">Project Details</h3>
-                <p className="text-sm text-brand-gray">Select what you want to build and choose the dimensions.</p>
+                <p className="text-sm text-brand-gray">
+                  Pick your project type, style, and measurements — pricing updates from real material + labor rates.
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { id: "deck", label: "Deck", desc: "Custom outdoor living" },
-                  { id: "pergola", label: "Pergola", desc: "Timber & shading" },
-                  { id: "garage", label: "Garage", desc: "Parking & framing" },
-                  { id: "addition", label: "Addition", desc: "Home expansion" },
-                ].map((p) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {PROJECT_TYPE_OPTIONS.map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => setProjectType(p.id)}
-                    className={`p-4 rounded-xl text-left border transition-all glass-panel ${
+                    type="button"
+                    onClick={() => selectProjectType(p.id)}
+                    className={`p-3 rounded-xl text-left border transition-all ${
                       projectType === p.id
-                        ? "border-brand-gold bg-brand-gold/5 text-foreground"
-                        : "border-brand-border hover:border-brand-gold/30 text-brand-gray hover:text-foreground"
+                        ? "border-brand-gold bg-brand-gold/10 text-white shadow-[inset_0_0_0_1px_rgba(197,168,128,0.2)]"
+                        : "border-brand-border hover:border-brand-gold/30 text-brand-gray hover:text-white"
                     }`}
                   >
-                    <div className="font-bold text-white uppercase tracking-wider">{p.label}</div>
-                    <div className="text-[11px] mt-1 text-brand-gray">{p.desc}</div>
+                    <div className="font-bold text-[11px] uppercase tracking-wider">{p.label}</div>
+                    <div className="text-[10px] mt-0.5 text-brand-gray leading-snug">{p.desc}</div>
                   </button>
                 ))}
               </div>
 
+              {styleOptions.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-brand-gray">Build Style</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {styleOptions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setStyle(s.id)}
+                        className={`px-3 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                          style === s.id
+                            ? "border-brand-gold bg-brand-gold/15 text-white"
+                            : "border-brand-border text-brand-gray hover:text-white"
+                        }`}
+                      >
+                        {s.short}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4 bg-brand-black/30 p-5 rounded-xl border border-brand-border">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold uppercase tracking-wider text-brand-gray">Length (ft)</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-brand-gray">
+                      {dimConfig.lengthLabel}
+                    </span>
                     <span className="text-lg font-bold text-brand-gold">{dimensions.length} ft</span>
                   </div>
                   <input
                     type="range"
-                    min="10"
-                    max="40"
+                    min={dimConfig.lengthMin}
+                    max={dimConfig.lengthMax}
                     value={dimensions.length}
-                    onChange={(e) => setDimensions((prev) => ({ ...prev, length: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setDimensions((prev) => ({ ...prev, length: parseInt(e.target.value) }))
+                    }
                     className="w-full h-1 bg-brand-border rounded-lg appearance-none cursor-pointer accent-brand-gold"
                   />
 
                   <div className="flex justify-between items-center pt-2">
-                    <span className="text-sm font-bold uppercase tracking-wider text-brand-gray">Width (ft)</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-brand-gray">
+                      {dimConfig.widthLabel}
+                    </span>
                     <span className="text-lg font-bold text-brand-gold">{dimensions.width} ft</span>
                   </div>
                   <input
                     type="range"
-                    min="10"
-                    max="40"
+                    min={dimConfig.widthMin}
+                    max={dimConfig.widthMax}
                     value={dimensions.width}
-                    onChange={(e) => setDimensions((prev) => ({ ...prev, width: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setDimensions((prev) => ({ ...prev, width: parseInt(e.target.value) }))
+                    }
                     className="w-full h-1 bg-brand-border rounded-lg appearance-none cursor-pointer accent-brand-gold"
                   />
                   <div className="text-[11px] text-right text-brand-gray pt-1">
-                    Total Estimated Area:{" "}
-                    <span className="text-white font-bold">{dimensions.length * dimensions.width} sq ft</span>
+                    {dimConfig.summary(dimensions.length, dimensions.width)}
                   </div>
+
+                  {projectType === "fence" && (
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-brand-border/50">
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-brand-gray">Corners</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={corners}
+                          onChange={(e) => setCorners(parseInt(e.target.value) || 0)}
+                          className="w-full bg-brand-black border border-brand-border rounded-lg px-2 py-1.5 text-sm text-white font-mono"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-brand-gray">Gates</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          value={gates}
+                          onChange={(e) => setGates(parseInt(e.target.value) || 0)}
+                          className="w-full bg-brand-black border border-brand-border rounded-lg px-2 py-1.5 text-sm text-white font-mono"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4 bg-brand-black/30 p-5 rounded-xl border border-brand-border">
-                  <div className="text-sm font-bold uppercase tracking-wider text-brand-gray mb-2">Wood / Material</div>
-                  {[
-                    { id: "treated", label: "Pressure Treated Wood", price: "Budget-Friendly ($)" },
-                    { id: "cedar", label: "Western Red Cedar", price: "Premium Natural ($$)" },
-                    { id: "composite", label: "Composite (Trex / TimberTech)", price: "Zero Maintenance ($$$)" },
-                  ].map((m) => (
-                    <label
-                      key={m.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
-                        material === m.id
-                          ? "border-brand-gold bg-brand-gold/5"
-                          : "border-brand-border hover:bg-brand-charcoal"
-                      }`}
-                    >
-                      <div className="flex items-center">
-                        <input
-                          type="radio"
-                          name="material"
-                          checked={material === m.id}
-                          onChange={() => setMaterial(m.id)}
-                          className="mr-3 text-brand-gold accent-brand-gold focus:ring-0"
-                        />
-                        <span className="text-sm font-bold text-white uppercase">{m.label}</span>
+                  {projectType === "deck" ? (
+                    <>
+                      <div className="text-sm font-bold uppercase tracking-wider text-brand-gray mb-2">
+                        Decking Material
                       </div>
-                      <span className="text-[10px] text-brand-gold uppercase tracking-wider font-semibold">{m.price}</span>
-                    </label>
-                  ))}
+                      {[
+                        { id: "treated", label: "Pressure Treated", price: "$" },
+                        { id: "cedar", label: "Western Red Cedar", price: "$$" },
+                        { id: "composite", label: "Composite", price: "$$$" },
+                      ].map((m) => (
+                        <label
+                          key={m.id}
+                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all mb-2 ${
+                            material === m.id
+                              ? "border-brand-gold bg-brand-gold/5"
+                              : "border-brand-border hover:bg-brand-charcoal"
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <input
+                              type="radio"
+                              name="material"
+                              checked={material === m.id}
+                              onChange={() => setMaterial(m.id)}
+                              className="mr-3 accent-brand-gold"
+                            />
+                            <span className="text-sm font-bold text-white uppercase">{m.label}</span>
+                          </div>
+                          <span className="text-[10px] text-brand-gold font-semibold">{m.price}</span>
+                        </label>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-sm font-bold uppercase tracking-wider text-brand-gray">
+                        Live Ballpark
+                      </div>
+                      <p className="text-xs text-brand-gray leading-relaxed">
+                        {PROJECT_TYPE_OPTIONS.find((p) => p.id === projectType)?.desc}. Rates use Fernie HH /
+                        Home Hardware material costs plus install labor.
+                      </p>
+                      <div className="text-2xl font-bold text-brand-gold font-mono pt-2">
+                        {usd(runEstimate().minUSD)} – {usd(runEstimate().maxUSD)}
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="block space-y-1 pt-2 border-t border-brand-border/50">
+                    <span className="text-[10px] font-bold uppercase text-brand-gray">Job location (optional)</span>
+                    <input
+                      type="text"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Cranbrook, Sparwood, Fernie…"
+                      className="w-full bg-brand-black border border-brand-border focus:border-brand-gold focus:outline-none rounded-lg px-3 py-2 text-xs text-white"
+                    />
+                  </label>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <span className="text-sm font-bold uppercase tracking-wider text-brand-gray">Select Add-ons & Features</span>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {[
-                    { id: "stairs", label: "Add Stairs" },
-                    { id: "lighting", label: "Post & Step Lighting" },
-                    { id: "railing", label: "Black Metal Railing" },
-                    { id: "pergola", label: "Timber Pergola Structure" },
-                    { id: "roof", label: "Covered Solid Patio Roof" },
-                  ].map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => toggleUpgrade(u.id)}
-                      className={`p-3 rounded-lg border text-left text-xs transition-all ${
-                        upgrades.includes(u.id)
-                          ? "border-brand-gold bg-brand-gold/5 text-white"
-                          : "border-brand-border text-brand-gray hover:text-white hover:border-brand-gold/20"
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold uppercase tracking-wider">{u.label}</span>
-                        {upgrades.includes(u.id) && <span className="text-brand-gold">✓</span>}
-                      </div>
-                    </button>
-                  ))}
+              {upgradeOptions.length > 0 && (
+                <div className="space-y-3">
+                  <span className="text-sm font-bold uppercase tracking-wider text-brand-gray">
+                    Add-ons & Features
+                  </span>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {upgradeOptions.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleUpgrade(u.id)}
+                        className={`p-3 rounded-lg border text-left text-xs transition-all ${
+                          upgrades.includes(u.id)
+                            ? "border-brand-gold bg-brand-gold/5 text-white"
+                            : "border-brand-border text-brand-gray hover:text-white hover:border-brand-gold/20"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold uppercase tracking-wider">{u.label}</span>
+                          {upgrades.includes(u.id) && <span className="text-brand-gold">✓</span>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-bold uppercase tracking-wider text-brand-gray">
@@ -431,7 +677,11 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. corner is on a slope, want hot-tub cutout, attach to existing ledger board…"
+                  placeholder={
+                    projectType === "fence"
+                      ? "e.g. replace old chain link, slope along back line, need double gate for RV…"
+                      : "e.g. attach to house ledger, hot-tub cutout, helical piles on slope…"
+                  }
                   rows={3}
                   className="w-full bg-brand-black/30 border border-brand-border focus:border-brand-gold focus:outline-none rounded-lg p-3 text-sm text-white placeholder:text-brand-gray resize-none"
                 />
@@ -578,8 +828,10 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                   </h3>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-brand-gray uppercase block">Project Area</span>
-                  <span className="font-mono font-bold text-white">{displayQuote.area} sq ft</span>
+                  <span className="text-xs text-brand-gray uppercase block">Project Size</span>
+                  <span className="font-mono font-bold text-white">
+                    {displayQuote.measure} {displayQuote.measureLabel}
+                  </span>
                 </div>
               </div>
 
@@ -603,7 +855,7 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                     {aiResult ? "What This Price Includes" : "Material Breakdown"}
                   </span>
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                    {(aiResult?.scopeIncludes ?? defaultIncludes(material, upgrades)).map((item, i) => (
+                    {(aiResult?.scopeIncludes ?? defaultIncludes(projectType, material, style, upgrades)).map((item, i) => (
                       <div key={i} className="flex items-start text-xs text-brand-gray">
                         <span className="w-1.5 h-1.5 rounded-full bg-brand-gold mr-2 mt-1.5 flex-shrink-0" />
                         <span>{item}</span>
@@ -658,6 +910,20 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                   {aiResult.disclaimer}
                 </div>
               )}
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-brand-border/40">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex-1 py-3 border border-brand-gold/40 text-brand-gold hover:bg-brand-gold/10 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  Download / Print PDF
+                </button>
+                <p className="text-[10px] text-brand-gray sm:flex-1 sm:self-center">
+                  Branded line-item estimate with materials, labor, permits, and upgrades — save as PDF from the print dialog.
+                </p>
+              </div>
             </div>
           )}
 
@@ -767,7 +1033,6 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                         className="bg-brand-black border border-brand-border focus:border-brand-gold focus:outline-none rounded p-2.5 text-xs text-white placeholder:text-brand-gray"
                       />
                     </div>
-                    {/* Honeypot — visually hidden, bots fill, real users don't */}
                     <input
                       type="text"
                       tabIndex={-1}
@@ -814,7 +1079,8 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
                       <strong className="text-brand-gold">{bookingDate} at {bookingTime}</strong> has been sent to Jaryd.
                     </p>
                     <p className="text-xs text-brand-gray max-w-md mx-auto">
-                      You'll get a confirmation by email or phone within one business day. For anything urgent, call <a className="text-brand-gold underline" href="tel:2509109071">250-910-9071</a>.
+                      You&apos;ll get a confirmation by email or phone within one business day. For anything urgent, call{" "}
+                      <a className="text-brand-gold underline" href="tel:2509109071">250-910-9071</a>.
                     </p>
                   </div>
 
@@ -857,7 +1123,13 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
           {step < 3 && (
             <button
               type="button"
-              onClick={() => setStep((prev) => prev + 1)}
+              onClick={() => {
+                if (step === 2) {
+                  setAiResult(null);
+                  setAiError(null);
+                }
+                setStep((prev) => prev + 1);
+              }}
               className="px-6 py-2.5 bg-brand-gold hover:bg-brand-gold-hover text-brand-black rounded-lg text-xs font-bold uppercase tracking-widest shadow transition-all flex items-center"
             >
               Continue
@@ -879,33 +1151,195 @@ export default function QuoteWizard({ isOpen, onClose, initialType = "deck" }: Q
 
       </div>
     </div>
+
+    {/* Printable estimate — visible only when printing */}
+    {step >= 4 ? (
+      <div className="hidden print:block">
+        <WebsiteEstimatePrint
+          data={estimateDocument}
+          referenceId={`EST-${sessionId.slice(0, 8).toUpperCase()}`}
+        />
+      </div>
+    ) : null}
+    </>
   );
 }
 
 // ─────────────────────── helpers ───────────────────────
 
-function defaultIncludes(material: string, upgrades: string[]): string[] {
-  const matLabel =
-    material === "cedar"
-      ? "Premium Western Red Cedar"
-      : material === "composite"
-      ? "TimberTech/Trex Composite"
-      : "Pressure-Treated Structural Wood";
-  const base = [
-    `${matLabel} planks`,
-    "Simpson Strong-Tie structural framing screws & connectors",
-    "Helical pile anchors or engineered concrete footings",
-    "Weather-resistant flashing & moisture barrier",
-  ];
-  const u = upgrades.map((up) => {
-    if (up === "stairs") return "Custom stringer stairs with landing steps";
-    if (up === "lighting") return "Low-voltage LED step & post-cap lighting";
-    if (up === "railing") return "Premium black aluminum handrails";
-    if (up === "pergola") return "Custom structural timber pergola frame";
-    if (up === "roof") return "Engineered heavy snow load solid patio roof";
-    return up;
-  });
-  return [...base, ...u];
+const DEFAULTS_BY_TYPE: Record<
+  QuoteProjectType,
+  { dimensions: { length: number; width: number }; style: string; corners?: number; gates?: number }
+> = {
+  deck: { dimensions: { length: 16, width: 12 }, style: "cedar" },
+  fence: { dimensions: { length: 120, width: 6 }, style: "cedar", corners: 2, gates: 1 },
+  pergola: { dimensions: { length: 12, width: 14 }, style: "open-timber" },
+  garage: { dimensions: { length: 24, width: 24 }, style: "timber-garage" },
+  shed: { dimensions: { length: 10, width: 12 }, style: "workshop-shed" },
+  addition: { dimensions: { length: 16, width: 20 }, style: "" },
+  other: { dimensions: { length: 12, width: 12 }, style: "" },
+};
+
+const DIMENSION_CONFIG: Record<
+  QuoteProjectType,
+  {
+    lengthLabel: string;
+    widthLabel: string;
+    lengthMin: number;
+    lengthMax: number;
+    widthMin: number;
+    widthMax: number;
+    summary: (l: number, w: number) => string;
+  }
+> = {
+  deck: {
+    lengthLabel: "Length (ft)",
+    widthLabel: "Width (ft)",
+    lengthMin: 8,
+    lengthMax: 40,
+    widthMin: 8,
+    widthMax: 40,
+    summary: (l, w) => `Total area: ${l * w} sq ft`,
+  },
+  fence: {
+    lengthLabel: "Total Run (ft)",
+    widthLabel: "Height (ft)",
+    lengthMin: 20,
+    lengthMax: 400,
+    widthMin: 4,
+    widthMax: 8,
+    summary: (l, w) => `${l} linear ft · ${w} ft tall`,
+  },
+  pergola: {
+    lengthLabel: "Length (ft)",
+    widthLabel: "Depth (ft)",
+    lengthMin: 8,
+    lengthMax: 32,
+    widthMin: 8,
+    widthMax: 24,
+    summary: (l, w) => `Footprint: ${l * w} sq ft`,
+  },
+  garage: {
+    lengthLabel: "Length (ft)",
+    widthLabel: "Width (ft)",
+    lengthMin: 16,
+    lengthMax: 40,
+    widthMin: 16,
+    widthMax: 40,
+    summary: (l, w) => `Footprint: ${l * w} sq ft`,
+  },
+  shed: {
+    lengthLabel: "Length (ft)",
+    widthLabel: "Width (ft)",
+    lengthMin: 6,
+    lengthMax: 24,
+    widthMin: 6,
+    widthMax: 20,
+    summary: (l, w) => `Footprint: ${l * w} sq ft`,
+  },
+  addition: {
+    lengthLabel: "Length (ft)",
+    widthLabel: "Width (ft)",
+    lengthMin: 10,
+    lengthMax: 50,
+    widthMin: 10,
+    widthMax: 40,
+    summary: (l, w) => `Footprint: ${l * w} sq ft`,
+  },
+  other: {
+    lengthLabel: "Length (ft)",
+    widthLabel: "Width (ft)",
+    lengthMin: 6,
+    lengthMax: 40,
+    widthMin: 6,
+    widthMax: 40,
+    summary: (l, w) => `Approx. ${l * w} sq ft`,
+  },
+};
+
+const UPGRADES_BY_TYPE: Record<QuoteProjectType, { id: string; label: string }[]> = {
+  deck: [
+    { id: "stairs", label: "Stairs" },
+    { id: "lighting", label: "LED Lighting" },
+    { id: "railing", label: "Black Railing" },
+    { id: "pergola", label: "Pergola" },
+    { id: "roof", label: "Covered Roof" },
+    { id: "skirting", label: "Cedar Skirting" },
+    { id: "privacy", label: "Privacy Wall" },
+    { id: "posts", label: "Timber Posts" },
+  ],
+  fence: [
+    { id: "staining", label: "Stain / Seal Finish" },
+    { id: "post_caps", label: "Decorative Post Caps" },
+    { id: "removal", label: "Remove Old Fence" },
+  ],
+  pergola: [
+    { id: "lighting", label: "Integrated Lighting" },
+    { id: "louvered", label: "Louvered Top Upgrade" },
+  ],
+  garage: [
+    { id: "insulated_door", label: "Insulated Overhead Door" },
+    { id: "windows", label: "Side Windows" },
+    { id: "electrical", label: "Electrical Rough-In" },
+  ],
+  shed: [
+    { id: "windows", label: "Window" },
+    { id: "electrical", label: "Electrical Rough-In" },
+  ],
+  addition: [
+    { id: "electrical", label: "Electrical Rough-In" },
+  ],
+  other: [],
+};
+
+function STYLE_OPTIONS_FOR_TYPE(type: QuoteProjectType) {
+  if (type === "fence") return PROJECT_STYLES.fence;
+  if (type === "pergola") return PROJECT_STYLES.pergola;
+  if (type === "garage" || type === "shed") return PROJECT_STYLES.garage;
+  return [];
+}
+
+function defaultIncludes(
+  projectType: QuoteProjectType,
+  material: string,
+  buildStyle: string,
+  upgrades: string[]
+): string[] {
+  const styleLabel = buildStyle ? buildStyle.replace(/-/g, " ") : "";
+  const base: string[] = [];
+  if (projectType === "deck") {
+    const matLabel =
+      material === "cedar" ? "Western Red Cedar" : material === "composite" ? "Composite" : "Pressure-treated";
+    base.push(`${matLabel} decking`, "Structural framing & footings", "Simpson Strong-Tie hardware");
+  } else if (projectType === "fence") {
+    base.push(`${styleLabel || "Cedar"} fence panels & posts`, "Post footings", "Top rail & hardware");
+  } else if (projectType === "pergola") {
+    base.push(`${styleLabel || "Timber"} pergola frame`, "Concrete pier footings");
+  } else if (projectType === "garage" || projectType === "shed") {
+    base.push(`${styleLabel || "Timber"} framed structure`, "Roof sheathing & shingles", "Standard entry door");
+  } else if (projectType === "addition") {
+    base.push("Framing package", "Roof tie-in", "Building wrap");
+  } else {
+    base.push("Custom scope per notes");
+  }
+  const upgradeLabels: Record<string, string> = {
+    stairs: "Custom stairs",
+    lighting: "LED lighting",
+    railing: "Black aluminum railing",
+    pergola: "Timber pergola",
+    roof: "Solid patio roof",
+    skirting: "Cedar skirting",
+    privacy: "Privacy wall",
+    posts: "Heavy timber posts",
+    staining: "Stain / seal finish",
+    post_caps: "Decorative post caps",
+    removal: "Old fence removal",
+    insulated_door: "Insulated overhead door",
+    windows: "Side windows",
+    electrical: "Electrical rough-in",
+    louvered: "Louvered top",
+  };
+  return [...base, ...upgrades.map((u) => upgradeLabels[u] ?? u)];
 }
 
 /** Next 8 weekdays, skipping weekends. */

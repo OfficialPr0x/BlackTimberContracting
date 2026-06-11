@@ -17,59 +17,30 @@ interface Transformation {
 
 const TRANSFORMATIONS: Transformation[] = [
   {
-    id: "fernie-deck",
-    title: "Rotted Pine Deck → Heavy Timber Build",
-    city: "Fernie, BC",
-    before: "/before.png",
-    after: "/after.png",
-    beforeLabel: "12yr-old pressure treated deck",
-    afterLabel: "Cantilevered cedar w/ helical piles",
-    budget: "$24,500",
-    duration: "3 wks",
-  },
-  {
-    id: "cranbrook-yard",
-    title: "Dead Backyard → Multi-Level Outdoor Living",
-    city: "Cranbrook, BC",
-    before: "/before.png",
-    after: "/deck_cranbrook.png",
-    beforeLabel: "Patchy lawn, no shade",
-    afterLabel: "Composite + black aluminum railing",
-    budget: "$32,800",
-    duration: "4 wks",
-  },
-  {
-    id: "fernie-patio",
-    title: "Exposed Patio → Covered Timber Pergola",
-    city: "Fernie, BC",
-    before: "/before.png",
-    after: "/patio_fernie.png",
-    beforeLabel: "Concrete slab, no cover",
-    afterLabel: "Doug-fir pergola, polycarbonate roof",
-    budget: "$18,900",
-    duration: "2.5 wks",
-  },
-  {
-    id: "sparwood-mountain",
-    title: "Sloped Yard → Engineered Mountain Deck",
+    id: "deck-stairs",
+    title: "Rotted Entry Stairs with Deck → Custom Cedar Stairs",
     city: "Sparwood, BC",
-    before: "/before.png",
-    after: "/after.png",
-    beforeLabel: "20° natural slope, unusable",
-    afterLabel: "Tiered deck w/ steel anchors",
-    budget: "$18,200",
-    duration: "2 wks",
+    before:
+      "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1781150065/715331074_122107253661344068_6031837467438663351_n_zopkfk.jpg",
+    after:
+      "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1781150065/715291967_122107253691344068_2084676794567852693_n_bha1ot.jpg",
+    beforeLabel: "Rotted entry stairs with deck",
+    afterLabel: "Cedar stairs + railing, concrete pad",
+    budget: "$2,200",
+    duration: "1 wk",
   },
   {
-    id: "elkford-gazebo",
-    title: "Wind-Swept Lot → Screened Gazebo Retreat",
-    city: "Elkford, BC",
-    before: "/before.png",
-    after: "/hero_bg.png",
-    beforeLabel: "Open wind, no privacy",
-    afterLabel: "Cedar + glass screen room",
-    budget: "$29,000",
-    duration: "3.5 wks",
+    id: "floor-lvp",
+    title: "Worn Hardwood → Luxury Vinyl Plank",
+    city: "Cranbrook, BC",
+    before:
+      "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1781150018/ChatGPT_Image_Jun_10_2026_09_53_06_PM_ke8pd8.png",
+    after:
+      "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1781150032/721200883_122110655181344068_1934277439020490146_n_rpsegv.jpg",
+    beforeLabel: "Scratched narrow-plank hardwood",
+    afterLabel: "Wide-plank LVP, fresh trim & paint",
+    budget: "$1,200",
+    duration: "4 days",
   },
 ];
 
@@ -218,7 +189,7 @@ export default function BeforeAfterWall() {
             Before. <span className="text-gold-shimmer">After.</span> Drag the middle.
           </h2>
           <p className="text-xs text-brand-gray mt-3 leading-relaxed">
-            Five real Kootenay transformations. Swipe left to keep going. Drag the gold handle on any image to reveal the build.
+            Two real Black Timber transformations. Drag the gold handle on any image to reveal the build.
           </p>
         </div>
 

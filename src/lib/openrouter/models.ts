@@ -13,6 +13,7 @@ export type ModelTask =
   | "quote"      // structured estimate from project specs + photos (vision needed)
   | "intel"      // address → grounded site brief (web access needed)
   | "sketch"     // canvas PNG → interpret what the client drew (vision needed)
+  | "mockup"     // text + optional reference images → AI concept render
   | "explain"    // narrate the cost-calculator math, sanity-check the range
   | "parse"      // Cmd+K admin form fill — fast + vision for screenshots
   | "chat"       // streaming concierge chat
@@ -23,6 +24,9 @@ export const MODELS: Record<ModelTask, string> = {
   quote:    process.env.OPENROUTER_MODEL_QUOTE    ?? "anthropic/claude-sonnet-4.5",
   intel:    process.env.OPENROUTER_MODEL_INTEL    ?? "perplexity/sonar-reasoning-pro",
   sketch:   process.env.OPENROUTER_MODEL_SKETCH   ?? "google/gemini-2.5-pro",
+  mockup:
+    process.env.OPENROUTER_MODEL_MOCKUP ??
+    "google/gemini-2.5-flash-image",
   explain:  process.env.OPENROUTER_MODEL_EXPLAIN  ?? "openai/gpt-5",
   // Cmd+K parse: vision + json_object (screenshots, text threads).
   parse:    process.env.OPENROUTER_MODEL_PARSE    ?? "google/gemini-2.5-flash",
@@ -46,6 +50,12 @@ export const FALLBACK_CHAIN: Record<ModelTask, string[]> = {
   quote:   [MODELS.quote,   "openai/gpt-5",                MODELS.fallback],
   intel:   [MODELS.intel,   "google/gemini-2.5-pro",       MODELS.fallback],
   sketch:  [MODELS.sketch,  "anthropic/claude-sonnet-4.5", MODELS.fallback],
+  mockup:  [
+    MODELS.mockup,
+    "google/gemini-3.1-flash-image-preview",
+    "black-forest-labs/flux.2-pro",
+    MODELS.fallback,
+  ],
   explain: [MODELS.explain, "anthropic/claude-sonnet-4.5", MODELS.fallback],
   // Flash → Haiku (both support json_object; avoid Sonnet/GPT-5 for parse).
   parse:   [

@@ -1,21 +1,22 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, BookOpen, Download, CheckCircle } from "lucide-react";
+import { X, BookOpen, Download, CheckCircle, Loader } from "lucide-react";
 
 export default function ExitIntentPopup() {
   const [isVisible, setIsVisible] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [website, setWebsite] = useState(""); // honeypot
 
   useEffect(() => {
-    // Check if user already dismissed or submitted
     const isDismissed = sessionStorage.getItem("deck_guide_popup_dismissed");
     if (isDismissed) return;
 
     const handleMouseLeave = (e: MouseEvent) => {
-      // Trigger when mouse moves above the viewport (e.g. to address bar or other tabs)
       if (e.clientY <= 0) {
         setIsVisible(true);
       }
@@ -32,10 +33,37 @@ export default function ExitIntentPopup() {
     sessionStorage.setItem("deck_guide_popup_dismissed", "true");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitted(true);
-    sessionStorage.setItem("deck_guide_popup_dismissed", "true");
+    setError(null);
+    setPending(true);
+
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "exit_intent",
+          contact: { name, email },
+          website,
+          payload: {
+            tags: ["exit-intent", "deck-pricing-guide", "homepage"],
+            offer: "2026 Kootenay Deck Pricing Guide",
+            page: typeof window !== "undefined" ? window.location.pathname : "/",
+          },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
+        throw new Error(body?.error?.message ?? "Could not save your request.");
+      }
+      setIsSubmitted(true);
+      sessionStorage.setItem("deck_guide_popup_dismissed", "true");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submission failed");
+    } finally {
+      setPending(false);
+    }
   };
 
   if (!isVisible) return null;
@@ -44,7 +72,6 @@ export default function ExitIntentPopup() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-brand-border bg-brand-charcoal p-6 text-left shadow-2xl space-y-6">
         
-        {/* Close Button */}
         <button 
           onClick={handleClose}
           className="absolute top-4 right-4 p-1 rounded-full hover:bg-brand-border text-brand-gray hover:text-white transition-all"
@@ -92,12 +119,35 @@ export default function ExitIntentPopup() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-brand-black border border-brand-border focus:border-brand-gold focus:outline-none p-3 text-xs text-white rounded-lg placeholder:text-brand-gray"
               />
+              <input
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                aria-hidden="true"
+                className="absolute -left-[9999px] w-1 h-1 opacity-0"
+                name="website"
+              />
+              {error ? (
+                <p className="text-[10px] text-red-400">{error}</p>
+              ) : null}
               <button
                 type="submit"
-                className="w-full py-3.5 bg-brand-gold hover:bg-brand-gold-hover text-brand-black font-bold uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
+                disabled={pending}
+                className="w-full py-3.5 bg-brand-gold hover:bg-brand-gold-hover disabled:opacity-60 text-brand-black font-bold uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
               >
-                <Download className="w-4 h-4" />
-                Send Me The Pricing Guide
+                {pending ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Send Me The Pricing Guide
+                  </>
+                )}
               </button>
             </form>
 

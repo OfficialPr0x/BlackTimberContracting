@@ -12,6 +12,8 @@ const ALLOWED = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
   "application/pdf",
   "text/markdown",
   "text/plain",

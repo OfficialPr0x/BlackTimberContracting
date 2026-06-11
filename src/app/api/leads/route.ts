@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
     const result = await deliverLead(parsed.data);
 
-    return Response.json({ ok: true, ...result });
+    return Response.json({ ok: true, leadId: result.leadId ?? null, ...result });
   } catch (err) {
     return errorResponse(err);
   }

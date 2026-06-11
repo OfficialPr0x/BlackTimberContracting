@@ -17,17 +17,19 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { logLead } from "../logger";
 import type { LeadInput } from "../openrouter/schemas";
+import { insertSiteLead } from "./site-leads-repository";
 
 const FILE_PATH = process.env.LEAD_LOG_FILE ?? "./.data/leads.jsonl";
 
 export interface DeliveryResult {
-  delivered: { file: boolean; email: boolean; slack: boolean };
+  delivered: { file: boolean; email: boolean; slack: boolean; database: boolean };
   errors: string[];
+  leadId?: string | null;
 }
 
 export async function deliverLead(lead: LeadInput): Promise<DeliveryResult> {
   const errors: string[] = [];
-  const delivered = { file: false, email: false, slack: false };
+  const delivered = { file: false, email: false, slack: false, database: false };
 
   // --- 1. File sink (always on — never lose a lead) -------------------------
   try {
@@ -57,8 +59,21 @@ export async function deliverLead(lead: LeadInput): Promise<DeliveryResult> {
     }
   }
 
-  logLead({ source: lead.source, email: lead.contact.email, delivered, errors });
-  return { delivered, errors };
+  let leadId: string | null = null;
+  try {
+    leadId = await insertSiteLead(lead, {
+      file: delivered.file,
+      email: delivered.email,
+      slack: delivered.slack,
+      errors,
+    });
+    if (leadId) delivered.database = true;
+  } catch (err) {
+    errors.push(`database: ${(err as Error).message}`);
+  }
+
+  logLead({ source: lead.source, email: lead.contact.email, delivered, errors, leadId });
+  return { delivered, errors, leadId };
 }
 
 // -----------------------------------------------------------------------------

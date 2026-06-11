@@ -5,6 +5,7 @@ import {
   createFolder,
   createMarkdownFile,
   listFileNodes,
+  updateFileNodeMeta,
 } from "./repository";
 import type { FileNodeRow } from "./types";
 import { loadQuote } from "../quotes";
@@ -41,6 +42,15 @@ export const BookkeeperVaultAction = z.discriminatedUnion("type", [
     signerName: z.string().max(120).optional(),
     signerMessage: z.string().max(2000).optional(),
   }),
+  z.object({
+    type: z.literal("file_bookkeeping_record"),
+    /** Vault file id of the uploaded image (from attachmentFileIds in prompt). */
+    fileId: z.string().uuid(),
+    parentFolderName: z.string().min(1).max(255),
+    imageName: z.string().min(1).max(255).optional(),
+    recordName: z.string().min(1).max(255),
+    recordContent: z.string().min(1).max(120_000),
+  }),
 ]);
 
 export type BookkeeperVaultAction = z.infer<typeof BookkeeperVaultAction>;
@@ -53,12 +63,19 @@ export const BookkeeperResponseSchema = z.object({
 export type BookkeeperResponse = z.infer<typeof BookkeeperResponseSchema>;
 
 export interface ExecutedVaultAction {
-  type: "create_folder" | "create_markdown" | "archive_document" | "create_esign";
+  type:
+    | "create_folder"
+    | "create_markdown"
+    | "archive_document"
+    | "create_esign"
+    | "file_bookkeeping_record";
   id: string;
   name: string;
   parentFolderName?: string;
   documentId?: string;
   signUrl?: string;
+  imageId?: string;
+  imageName?: string;
 }
 
 function resolveParentId(
@@ -117,6 +134,35 @@ export async function executeVaultActions(
           id: node.id,
           name: node.name,
           parentFolderName: action.parentFolderName,
+        });
+      } else if (action.type === "file_bookkeeping_record") {
+        const parentId = resolveParentId(
+          flat,
+          action.parentFolderName,
+          defaultParentId
+        );
+        const imageMeta = flat.find((n) => n.id === action.fileId);
+        if (!imageMeta || imageMeta.kind !== "file") {
+          errors.push(`Image file ${action.fileId} not found in vault`);
+          continue;
+        }
+        const finalImageName = action.imageName?.trim() || imageMeta.name;
+        await updateFileNodeMeta(action.fileId, {
+          name: finalImageName,
+          parentId,
+        });
+        const recordNode = await createMarkdownFile(
+          action.recordName,
+          parentId,
+          action.recordContent
+        );
+        executed.push({
+          type: "file_bookkeeping_record",
+          id: recordNode.id,
+          name: recordNode.name,
+          parentFolderName: action.parentFolderName,
+          imageId: action.fileId,
+          imageName: finalImageName,
         });
       } else if (action.type === "archive_document") {
         const doc = await loadQuote(action.documentId);

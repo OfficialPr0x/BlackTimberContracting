@@ -318,6 +318,120 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ════════════════════════ Field Guide funnel (/field-guide) ════════════════════════ */
+
+/* Topographic contour texture — seamless elevation rings, mountain identity.
+   The "peaks" are concentric closed loops fully contained inside a 520px tile,
+   so the pattern repeats with no seams or broken lines. */
+.guide-contours {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520' viewBox='0 0 520 520'%3E%3Cg fill='none' stroke='%23c5a880' stroke-width='1.1'%3E%3Cellipse cx='140' cy='150' rx='20' ry='16'/%3E%3Cellipse cx='140' cy='150' rx='42' ry='34'/%3E%3Cellipse cx='140' cy='150' rx='66' ry='54'/%3E%3Cellipse cx='140' cy='150' rx='92' ry='76'/%3E%3Cellipse cx='140' cy='150' rx='120' ry='100'/%3E%3Cellipse cx='380' cy='370' rx='18' ry='20'/%3E%3Cellipse cx='380' cy='370' rx='40' ry='44'/%3E%3Cellipse cx='380' cy='370' rx='64' ry='70'/%3E%3Cellipse cx='380' cy='370' rx='90' ry='98'/%3E%3Cellipse cx='380' cy='370' rx='116' ry='126'/%3E%3Cellipse cx='380' cy='370' rx='132' ry='142'/%3E%3Cellipse cx='420' cy='120' rx='16' ry='14'/%3E%3Cellipse cx='420' cy='120' rx='34' ry='30'/%3E%3Cellipse cx='420' cy='120' rx='52' ry='46'/%3E%3Cellipse cx='420' cy='120' rx='70' ry='60'/%3E%3Cellipse cx='120' cy='410' rx='18' ry='16'/%3E%3Cellipse cx='120' cy='410' rx='38' ry='34'/%3E%3Cellipse cx='120' cy='410' rx='56' ry='50'/%3E%3Cellipse cx='120' cy='410' rx='72' ry='60'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 520px 520px;
+  background-repeat: repeat;
+}
+
+/* Premium "locked field manual" signup card. */
+.guide-manual-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.1rem;
+  padding: 1.65rem 1.6rem 1.6rem 1.9rem;
+  background:
+    linear-gradient(160deg, rgba(27, 26, 23, 0.96) 0%, rgba(11, 10, 9, 0.97) 100%);
+  border: 1px solid rgba(197, 168, 128, 0.38);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(197, 168, 128, 0.06),
+    0 40px 80px -30px rgba(0, 0, 0, 0.85),
+    0 0 60px -20px rgba(197, 168, 128, 0.25);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+/* Leather-manual spine accent down the left edge. */
+.guide-manual-card__spine {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(180deg, #c5a880 0%, #8c714c 50%, #c5a880 100%);
+  opacity: 0.8;
+}
+.guide-manual-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120% 80% at 100% 0%, rgba(197, 168, 128, 0.12) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+/* Chapter tiles — rugged field-manual look. */
+.guide-chapter-tile {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  padding: 1.05rem 1.1rem;
+  border-radius: 0.7rem;
+  border: 1px solid var(--color-brand-border);
+  background: rgba(11, 10, 9, 0.55);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s, background 0.3s,
+    box-shadow 0.3s;
+}
+.guide-chapter-tile:hover {
+  transform: translateY(-3px);
+  border-color: rgba(197, 168, 128, 0.4);
+  background: rgba(20, 19, 17, 0.85);
+  box-shadow: 0 16px 34px -18px rgba(0, 0, 0, 0.8);
+}
+.guide-chapter-tile__num {
+  flex: 0 0 auto;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  padding-top: 0.1rem;
+  color: rgba(197, 168, 128, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+.guide-chapter-tile:hover .guide-chapter-tile__num {
+  color: var(--color-brand-gold);
+}
+
+/* Visual proof cards — cinematic image tiles with overlay + caption. */
+.guide-proof-card {
+  position: relative;
+  margin: 0;
+  border-radius: 0.85rem;
+  overflow: hidden;
+  border: 1px solid var(--color-brand-border);
+  aspect-ratio: 4 / 5;
+  background: var(--color-brand-charcoal);
+}
+@media (min-width: 640px) {
+  .guide-proof-card {
+    aspect-ratio: 4 / 3;
+  }
+}
+.guide-proof-card__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.guide-proof-card:hover .guide-proof-card__img {
+  transform: scale(1.05);
+}
+.guide-proof-card__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 10, 9, 0.05) 0%, rgba(11, 10, 9, 0.45) 45%, rgba(11, 10, 9, 0.92) 100%);
+}
+.guide-proof-card__body {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.1rem 1.2rem 1.2rem;
+}
+
 /* Field guide reader — warm paper, readable type */
 .prose-guide {
   font-size: 15px;

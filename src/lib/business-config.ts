@@ -55,8 +55,8 @@ export function getBusinessProfile(): BusinessProfile {
     region:
       process.env.BUSINESS_REGION ?? "Cranbrook · East Kootenay · British Columbia",
     phone: process.env.BUSINESS_PHONE ?? "250-910-9071",
-    email: process.env.BUSINESS_EMAIL ?? "info@blacktimbercontracting.com",
-    domain: process.env.BUSINESS_DOMAIN ?? "blacktimbercontracting.com",
+    email: process.env.BUSINESS_EMAIL ?? "hello@blacktimber.ca",
+    domain: process.env.BUSINESS_DOMAIN ?? "blacktimber.ca",
     address: process.env.BUSINESS_ADDRESS || undefined,
     gstNumber: process.env.BUSINESS_GST_NUMBER || undefined,
     wcbNumber: process.env.BUSINESS_WCB_NUMBER || undefined,

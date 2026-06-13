@@ -324,6 +324,23 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.75;
   color: #1a1816;
 }
+/* Wider desktop reading column — larger, more comfortable type. */
+@media screen and (min-width: 1024px) {
+  .prose-guide--wide {
+    font-size: 16.5px;
+    line-height: 1.8;
+  }
+  .prose-guide--wide h1 {
+    font-size: 2rem;
+  }
+  .prose-guide--wide h2 {
+    font-size: 1.4rem;
+    margin-top: 2.75rem;
+  }
+  .prose-guide--wide h3 {
+    font-size: 1.12rem;
+  }
+}
 .prose-guide h1 {
   font-size: 1.65rem;
   font-weight: 800;
@@ -408,5 +425,263 @@ h1, h2, h3, h4, h5, h6 {
   }
   .prose-guide p:has(> img) {
     page-break-inside: avoid;
+  }
+}
+
+/* ── Anchored headings (offset for sticky header) ──────────── */
+.prose-guide h2,
+.prose-guide h3 {
+  scroll-margin-top: 90px;
+}
+
+/* ── Table of contents ─────────────────────────────────────── */
+.prose-guide .guide-toc {
+  margin: 2.25rem 0;
+  padding: 1.5rem 1.75rem;
+  border: 1px solid #e3ded4;
+  border-radius: 1rem;
+  background: #fffdf9;
+  box-shadow: 0 14px 44px -30px rgba(11, 10, 9, 0.45);
+  break-inside: avoid;
+}
+.prose-guide .guide-toc__title {
+  margin: 0 0 1rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8c714c;
+}
+.prose-guide .guide-toc__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 1.75rem;
+}
+.prose-guide .guide-toc__list li {
+  margin: 0;
+  padding: 0;
+}
+.prose-guide .guide-toc__list a {
+  display: block;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #2b2723;
+  text-decoration: none;
+  border-bottom: 1px solid #f0ebe1;
+  transition: color 0.15s ease;
+}
+.prose-guide .guide-toc__list a:hover {
+  color: #8c714c;
+}
+@media (max-width: 600px) {
+  .prose-guide .guide-toc__list {
+    grid-template-columns: 1fr;
+  }
+}
+/* On large screens the sticky left sidebar handles navigation. Keep the
+   inline card for tablet/mobile and for print output. */
+@media screen and (min-width: 1024px) {
+  .prose-guide .guide-toc {
+    display: none;
+  }
+}
+
+/* ── Project Spotlight cards ───────────────────────────────── */
+.prose-guide .guide-spotlight {
+  margin: 2.5rem 0;
+  padding: 1.5rem;
+  border: 1px solid #e3ded4;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #fffdf9 0%, #f6f1e8 100%);
+  box-shadow: 0 18px 50px -32px rgba(11, 10, 9, 0.5);
+  break-inside: avoid;
+}
+.prose-guide .guide-spotlight__eyebrow {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8c714c;
+}
+.prose-guide .guide-spotlight__title {
+  margin: 0.35rem 0 1.1rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #1a1816;
+}
+.prose-guide .guide-spotlight__media {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+.prose-guide .guide-spotlight__media--single {
+  grid-template-columns: 1fr;
+}
+.prose-guide .guide-spotlight__media--single img {
+  aspect-ratio: 16 / 9;
+}
+.prose-guide .guide-spotlight__media figure {
+  margin: 0;
+  position: relative;
+}
+.prose-guide .guide-spotlight__media img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  margin: 0;
+  border-radius: 0.6rem;
+  border: 1px solid #e3ded4;
+  background: #0b0a09;
+}
+.prose-guide .guide-spotlight__media figcaption {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-radius: 0.3rem;
+  background: rgba(11, 10, 9, 0.82);
+  color: #ffffff;
+}
+.prose-guide .guide-spotlight__media figure:last-child figcaption {
+  background: #c5a880;
+  color: #0b0a09;
+}
+.prose-guide .guide-spotlight__facts {
+  margin: 1.25rem 0 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.prose-guide .guide-spotlight__facts > div {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid #eae4d8;
+}
+.prose-guide .guide-spotlight__facts > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.prose-guide .guide-spotlight__facts dt {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #8c714c;
+  padding-top: 0.1rem;
+}
+.prose-guide .guide-spotlight__facts dd {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #2b2723;
+}
+.prose-guide .guide-spotlight__cta {
+  display: inline-block;
+  margin-top: 1.25rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.6rem;
+  background: #0b0a09;
+  color: #f6f1e8 !important;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-decoration: none;
+}
+.prose-guide .guide-spotlight__cta:hover {
+  background: #c5a880;
+  color: #0b0a09 !important;
+}
+
+/* ── Inline mid-guide CTA callout ──────────────────────────── */
+.prose-guide .guide-cta {
+  margin: 2.5rem 0;
+  padding: 1.6rem 1.75rem;
+  border-radius: 1rem;
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, #161310 0%, #221d16 100%);
+  color: #f6f1e8;
+  break-inside: avoid;
+}
+.prose-guide .guide-cta__eyebrow {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #c5a880;
+}
+.prose-guide .guide-cta__headline {
+  margin: 0.5rem 0 0;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  font-weight: 800;
+  color: #ffffff;
+}
+.prose-guide .guide-cta__body {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: rgba(246, 241, 232, 0.78);
+}
+.prose-guide .guide-cta__actions {
+  margin-top: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.prose-guide .guide-cta__phone {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border-radius: 0.55rem;
+  background: #c5a880;
+  color: #0b0a09 !important;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+.prose-guide .guide-cta__phone:hover {
+  background: #d8bd92;
+}
+.prose-guide .guide-cta__link {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #c5a880 !important;
+  text-decoration: none;
+}
+.prose-guide .guide-cta__link:hover {
+  text-decoration: underline;
+}
+.prose-guide .guide-cta__area {
+  margin: 1rem 0 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(197, 168, 128, 0.7);
+}
+
+@media (max-width: 540px) {
+  .prose-guide .guide-spotlight__facts > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
   }
 }

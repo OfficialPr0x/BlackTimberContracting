@@ -473,6 +473,9 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-center">
+            <a href="/field-guide" className="hover:text-brand-gold text-brand-gold/90 font-semibold">
+              Free Field Guide
+            </a>
             <a href="#privacy" className="hover:text-white">Privacy</a>
             <a href="#terms" className="hover:text-white">Terms</a>
             <span className="text-brand-gold flex items-center gap-1.5">

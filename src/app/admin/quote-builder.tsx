@@ -528,7 +528,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
 
   const handleSaveAndOpenPdf = useCallback(async () => {
     const id = await handleSave();
-    if (id) window.open(`/admin/quotes/${id}`, "_blank", "noopener,noreferrer");
+    if (id) window.open(`/admin/quotes/${id}?download=1`, "_blank", "noopener,noreferrer");
   }, [handleSave]);
 
   // Ctrl+S / Cmd+S quick save
@@ -1113,7 +1113,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
                 <textarea
                   value={paymentInstructions}
                   onChange={(e) => setPaymentInstructions(e.target.value)}
-                  placeholder="e.g., E-transfer to billing@blacktimbercontracting.ca&#10;Cheques payable to Black Timber Contracting Ltd."
+                  placeholder="e.g., E-transfer to billing@blacktimber.ca&#10;Cheques payable to Black Timber Contracting Ltd."
                   className={`${inputCls} min-h-[72px] font-sans`}
                 />
               </Field>
@@ -1183,7 +1183,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
         {/* ---- Action bar — save & branded PDF ---- */}
         <div className="sticky bottom-0 -mx-5 px-5 py-4 bg-brand-black/90 backdrop-blur border-t border-brand-border space-y-3">
           <p className="text-[10px] font-mono text-brand-gray uppercase tracking-widest">
-            Branded PDF uses your logo + gold theme · Ctrl+S quick save
+            Branded PDF uses your logo + gold theme · one-click download
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -1211,7 +1211,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-brand-black text-sm font-mono uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
             >
               <FileDown className="w-3.5 h-3.5" />
-              Save &amp; open PDF
+              Save &amp; download PDF
             </button>
             <button
               type="button"
@@ -1231,7 +1231,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-brand-gold/40 hover:border-brand-gold text-sm font-mono uppercase tracking-widest text-brand-gold transition-colors"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  Open saved PDF
+                  Open &amp; download PDF
                 </a>
               </>
             ) : null}
@@ -1279,7 +1279,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
                         Edit
                       </button>
                       <a
-                        href={`/admin/quotes/${q.id}`}
+                        href={`/admin/quotes/${q.id}?download=1`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 px-2 py-1 rounded border border-brand-border hover:border-brand-gold text-[9px] font-mono uppercase tracking-wider text-brand-gray hover:text-brand-gold"

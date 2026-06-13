@@ -6,8 +6,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Printer, ArrowLeft } from "lucide-react";
-import BrandedDocument from "@/components/admin/BrandedDocument";
+import { ArrowLeft } from "lucide-react";
+import BrandedDocument, { idToDocType } from "@/components/admin/BrandedDocument";
+import DownloadPdfButton from "@/components/pdf/DownloadPdfButton";
+import { documentPdfFilename } from "@/lib/pdf/filename";
 import type { BusinessProfile } from "@/lib/business-config";
 import type { AdminQuoteSaved } from "@/lib/admin/schemas";
 import { PREVIEW_STORAGE_KEY } from "@/lib/admin/draft-helpers";
@@ -69,22 +71,22 @@ export default function PreviewClient({ business }: { business: BusinessProfile 
                 Preview only — not saved
               </span>
             ) : null}
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-brand-black text-[10px] font-mono uppercase tracking-widest font-bold"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Save as PDF
-            </button>
+            <DownloadPdfButton
+              filename={documentPdfFilename({
+                id: quote.id,
+                documentType: quote.documentType ?? idToDocType(quote.id),
+                customerName: quote.customer.name,
+              })}
+              label="Download PDF"
+              variant="gold"
+            />
           </div>
         </div>
       </header>
 
       <main className="max-w-[880px] mx-auto px-4 py-8 print:px-0 print:py-0">
         <p className="text-[11px] text-brand-gray mb-4 print:hidden font-mono text-center">
-          In the print dialog, choose <strong className="text-brand-gold">Save as PDF</strong> and
-          turn on <strong className="text-brand-gold">Background graphics</strong> for brand colors.
+          Download a formatted PDF instantly — logo, gold header, and line items included.
         </p>
         <BrandedDocument quote={quote} business={business} />
       </main>

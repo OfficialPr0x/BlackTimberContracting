@@ -5,19 +5,13 @@
  */
 
 import { BRAND } from "@/lib/brand";
+import { getBusinessProfile } from "@/lib/business-config";
 import type { EstimateDocumentData } from "@/lib/pricing/estimate-lines";
 
 const LOGO_URL =
   "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1779592928/ChatGPT_Image_May_23__2026__08_07_11_PM-removebg-preview_f81lz0.png";
 
-const BUSINESS = {
-  name: "Black Timber Contracting",
-  legalName: "Black Timber Contracting Ltd.",
-  region: "Cranbrook · East Kootenay · British Columbia",
-  phone: "250-910-9071",
-  email: "info@blacktimbercontracting.com",
-  domain: "blacktimbercontracting.com",
-};
+const BUSINESS = getBusinessProfile();
 
 function usd(n: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -54,7 +48,10 @@ export default function WebsiteEstimatePrint({
   const sections = ["materials", "labor", "upgrade", "permits", "summary"] as const;
 
   return (
-    <article className="btc-document relative bg-white text-[#1a1816] mx-auto max-w-[8.5in] shadow-2xl print:shadow-none print:rounded-none rounded-lg overflow-hidden">
+    <article
+      data-pdf-document
+      className="btc-document relative bg-white text-[#1a1816] mx-auto max-w-[8.5in] shadow-2xl print:shadow-none print:rounded-none rounded-lg overflow-hidden"
+    >
       <header className="relative px-10 pt-8 pb-7" style={{ background: BRAND.black }}>
         <div
           className="absolute top-0 left-0 right-0 h-1"
@@ -70,6 +67,7 @@ export default function WebsiteEstimatePrint({
                 src={LOGO_URL}
                 alt={`${BUSINESS.name} logo`}
                 className="w-full h-full object-contain"
+                crossOrigin="anonymous"
               />
             </div>
             <div>

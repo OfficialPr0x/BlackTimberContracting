@@ -1,5 +1,6 @@
 import { getGuideSession } from "@/lib/guide/session";
 import { loadGuideMarkdown } from "@/lib/guide/load-content";
+import { getGuideHeadings } from "@/lib/guide/toc";
 import GuideLoginForm from "@/components/guide/GuideLoginForm";
 import FieldGuideView from "@/components/guide/FieldGuideView";
 
@@ -22,6 +23,13 @@ export default async function GuidePage() {
   }
 
   const markdown = await loadGuideMarkdown();
+  const headings = getGuideHeadings(markdown);
 
-  return <FieldGuideView markdown={markdown} subscriberEmail={session.email} />;
+  return (
+    <FieldGuideView
+      markdown={markdown}
+      subscriberEmail={session.email}
+      headings={headings}
+    />
+  );
 }

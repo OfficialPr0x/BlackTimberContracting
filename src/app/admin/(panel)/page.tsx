@@ -127,7 +127,7 @@ export default async function AdminDashboardPage() {
                     Edit
                   </Link>
                   <Link
-                    href={`/admin/quotes/${q.id}`}
+                    href={`/admin/quotes/${q.id}?download=1`}
                     className="text-[9px] font-mono uppercase tracking-wider text-brand-gold px-2 py-1 border border-brand-gold/40 rounded"
                   >
                     PDF

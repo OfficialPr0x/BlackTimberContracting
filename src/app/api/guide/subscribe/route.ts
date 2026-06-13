@@ -38,13 +38,17 @@ export async function POST(req: Request) {
     const password = generateGuidePassword();
     const passwordHash = hashGuidePassword(password);
 
+    const pagePath = page ?? "/";
+    const funnelTags =
+      pagePath.includes("field-guide") ? ["field-guide-funnel"] : ["homepage"];
+
     const leadResult = await deliverLead({
       source: "exit_intent",
       contact: { name, email },
       payload: {
-        tags: ["exit-intent", "field-guide", "kootenay-manual", "homepage"],
+        tags: ["exit-intent", "field-guide", "kootenay-manual", ...funnelTags],
         offer: "Kootenay Field Guide — Project Readiness & Resilience Manual",
-        page: page ?? "/",
+        page: pagePath,
         guideSlug: "kootenay-field-guide",
       },
     });

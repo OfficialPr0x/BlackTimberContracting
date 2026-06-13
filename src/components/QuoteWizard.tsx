@@ -11,7 +11,6 @@ import {
   AlertTriangle,
   Sparkles,
   Loader,
-  Download,
 } from "lucide-react";
 import {
   estimateProject,
@@ -21,6 +20,8 @@ import {
 import { buildEstimateDocument } from "@/lib/pricing/estimate-lines";
 import { PROJECT_STYLES } from "@/lib/openrouter/project-styles";
 import WebsiteEstimatePrint from "@/components/WebsiteEstimatePrint";
+import DownloadPdfButton from "@/components/pdf/DownloadPdfButton";
+import { estimatePdfFilename } from "@/lib/pdf/filename";
 
 interface QuoteWizardProps {
   isOpen: boolean;
@@ -233,7 +234,7 @@ export default function QuoteWizard({
             source: "quote_wizard",
             contact: {
               name: "Website Visitor",
-              email: `estimate+${sessionId.replace(/-/g, "").slice(0, 16)}@inquiry.blacktimbercontracting.com`,
+              email: `estimate+${sessionId.replace(/-/g, "").slice(0, 16)}@inquiry.blacktimber.ca`,
             },
             website: "",
             payload: {
@@ -912,16 +913,17 @@ export default function QuoteWizard({
               )}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-brand-border/40">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 border border-brand-gold/40 text-brand-gold hover:bg-brand-gold/10 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  Download / Print PDF
-                </button>
+                <DownloadPdfButton
+                  filename={estimatePdfFilename(
+                    `EST-${sessionId.slice(0, 8).toUpperCase()}`,
+                    projectType
+                  )}
+                  label="Download PDF"
+                  variant="wizard"
+                />
                 <p className="text-[10px] text-brand-gray sm:flex-1 sm:self-center">
-                  Branded line-item estimate with materials, labor, permits, and upgrades — save as PDF from the print dialog.
+                  Branded line-item estimate with materials, labor, permits, and upgrades — downloads
+                  instantly as a formatted PDF.
                 </p>
               </div>
             </div>
@@ -1152,9 +1154,12 @@ export default function QuoteWizard({
       </div>
     </div>
 
-    {/* Printable estimate — visible only when printing */}
+    {/* Off-screen estimate document for one-click PDF download */}
     {step >= 4 ? (
-      <div className="hidden print:block">
+      <div
+        className="fixed left-[-12000px] top-0 w-[8.5in] pointer-events-none opacity-0 print:hidden"
+        aria-hidden
+      >
         <WebsiteEstimatePrint
           data={estimateDocument}
           referenceId={`EST-${sessionId.slice(0, 8).toUpperCase()}`}

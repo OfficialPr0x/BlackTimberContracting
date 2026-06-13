@@ -7,8 +7,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader, Pencil, Printer, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader, Pencil, Trash2 } from "lucide-react";
 import BrandedDocument, { idToDocType } from "@/components/admin/BrandedDocument";
+import DownloadPdfButton from "@/components/pdf/DownloadPdfButton";
+import { documentPdfFilename } from "@/lib/pdf/filename";
+import { downloadDocumentFromPage } from "@/lib/pdf/download-document-pdf";
 import type { BusinessProfile } from "@/lib/business-config";
 import InvoicePaymentTracker from "@/components/admin/InvoicePaymentTracker";
 import type { AdminQuoteSaved, InvoicePaymentSummary } from "@/lib/admin/schemas";
@@ -87,6 +90,22 @@ export default function QuoteDetailView({
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!quote || loading) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("download") !== "1") return;
+
+    const filename = documentPdfFilename({
+      id: quote.id,
+      documentType: quote.documentType,
+      customerName: quote.customer.name,
+    });
+
+    void downloadDocumentFromPage(filename).finally(() => {
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+  }, [quote, loading]);
 
   const handleDelete = async () => {
     if (
@@ -181,22 +200,22 @@ export default function QuoteDetailView({
               {deleting ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
               Delete
             </button>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"
-            >
-              <Printer className="w-3 h-3" />
-              Print / save PDF
-            </button>
+            <DownloadPdfButton
+              filename={documentPdfFilename({
+                id: quote.id,
+                documentType: quote.documentType,
+                customerName: quote.customer.name,
+              })}
+              label="Download PDF"
+              onError={(message) => setError(message)}
+            />
           </div>
         </div>
       </header>
 
       <main className="max-w-[880px] mx-auto px-4 py-10 print:px-0 print:py-0 print:max-w-none">
         <p className="text-[11px] text-brand-gray mb-4 print:hidden font-mono">
-          Print or Save as PDF — enable <strong className="text-brand-gold">Background graphics</strong>{" "}
-          in the print dialog for logo and colors.
+          One-click download — branded PDF with logo, line items, and totals.
         </p>
         {docType === "invoice" ? (
           <div className="mb-8 print:hidden rounded-xl border border-brand-border bg-brand-charcoal/40 p-5">

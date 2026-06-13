@@ -8,6 +8,8 @@ The Kootenay region of south‑eastern British Columbia combines alpine valleys,
 
 {{GUIDE_IMAGE:1}}
 
+{{TOC}}
+
 ## 1 Project readiness checklist
 
 Before you approach a contractor or begin a renovation, collect the right information. A clear brief will reduce delays and unexpected costs.
@@ -76,6 +78,8 @@ In addition to a building permit, you may need:
 - Registration with the Licensing and Consumer Services Branch of BC Housing if building a single‑family dwelling.
 - Approvals from outside agencies: Registered Onsite Wastewater Practitioners for septic systems, the Land Title Office for covenants and, in some areas, local First Nations or federal agencies (RDCK provides a list of agencies).
 
+{{CTA}}
+
 ## 4 BC Building Code & Energy Step Code
 
 {{GUIDE_IMAGE:6}}
@@ -135,6 +139,8 @@ The Kootenays' climate demands resilient materials:
 - **Roofing:** metal or asphalt shingle roofs are recommended; avoid untreated wood shakes due to fire risk.
 - **Vapour control:** use appropriate vapour barriers (Class I or II) depending on assembly. Condensation within walls is a major cause of mold and rot.
 
+{{SPOTLIGHT:1}}
+
 ## 7 Wildfire preparedness & FireSmart practices
 
 {{GUIDE_IMAGE:9}}
@@ -184,6 +190,8 @@ If a flood warning is issued, shut off electricity to threatened areas, move sma
 
 The RDCK lists flood‑preparedness steps and provides sandbag locations in communities across the central Kootenays. Residents are responsible for securing their properties; sandbags and sand are supplied during flood season.
 
+{{CTA}}
+
 ## 9 Landslide & slope stability
 
 {{GUIDE_IMAGE:11}}
@@ -223,6 +231,8 @@ Cold winters in the Kootenays demand proactive maintenance. The BC PreparedBC Se
 
 A seasonal checklist is provided at the end of this guide.
 
+{{SPOTLIGHT:2}}
+
 ## 12 Pests & wildlife
 
 ### 12.1 Carpenter ants
@@ -254,6 +264,8 @@ Prepare grab‑and‑go kits containing water (4 L/person/day for at least three
 
 Learn evacuation stages: Evacuation Alert means be ready to leave; Evacuation Order means leave immediately; Evacuation Rescind means it is safe to return. Familiarize yourself with sandbagging techniques if you live near rivers and with local emergency notification systems (RDCK and RDEK operate alert systems). Register for the BC Emergency Notification System and follow @EmergencyInfoBC on social media for real‑time information.
 
+{{CTA}}
+
 ## 14 Budgeting & financing your project
 
 {{GUIDE_IMAGE:16}}
@@ -273,6 +285,8 @@ Tips for controlling costs:
 - Purchase materials smartly: consider contractor discounts or buying through bulk suppliers.
 - DIY where appropriate but leave structural, electrical and gas work to professionals.
 - **Access incentives:** combine CleanBC rebates, municipal programs (e.g., Cranbrook energy‑efficiency loans) and federal grants. Keep receipts and energy‑advisor reports for rebate claims.
+
+{{SPOTLIGHT:3}}
 
 ## 15 Insurance & risk management
 

@@ -1,4 +1,8 @@
-import html2canvas from "html2canvas";
+// html2canvas-pro is a maintained drop-in replacement for html2canvas that
+// supports modern CSS color functions (oklch / oklab / lab / color()) emitted
+// by Tailwind v4. The original html2canvas 1.4.1 throws
+// "unsupported color function 'oklab'" on any Tailwind v4 computed style.
+import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 
 export const PDF_DOCUMENT_SELECTOR = "[data-pdf-document]";

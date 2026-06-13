@@ -32,6 +32,7 @@ export default function QuoteDetailView({
   const [quote, setQuote] = useState<AdminQuoteSaved | null>(initialQuote);
   const [loading, setLoading] = useState(!initialQuote);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [payments, setPayments] = useState<InvoicePaymentSummary | null>(null);
 
@@ -102,9 +103,15 @@ export default function QuoteDetailView({
       customerName: quote.customer.name,
     });
 
-    void downloadDocumentFromPage(filename).finally(() => {
-      window.history.replaceState({}, "", window.location.pathname);
-    });
+    void downloadDocumentFromPage(filename)
+      .catch((e) => {
+        setDownloadError(
+          e instanceof Error ? e.message : "Could not generate the PDF. Try the Download button.",
+        );
+      })
+      .finally(() => {
+        window.history.replaceState({}, "", window.location.pathname);
+      });
   }, [quote, loading]);
 
   const handleDelete = async () => {
@@ -207,7 +214,7 @@ export default function QuoteDetailView({
                 customerName: quote.customer.name,
               })}
               label="Download PDF"
-              onError={(message) => setError(message)}
+              onError={(message) => setDownloadError(message)}
             />
           </div>
         </div>
@@ -217,6 +224,18 @@ export default function QuoteDetailView({
         <p className="text-[11px] text-brand-gray mb-4 print:hidden font-mono">
           One-click download — branded PDF with logo, line items, and totals.
         </p>
+        {downloadError ? (
+          <div className="mb-6 print:hidden rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 flex items-start justify-between gap-4">
+            <p className="text-xs text-red-300">{downloadError}</p>
+            <button
+              type="button"
+              onClick={() => setDownloadError(null)}
+              className="text-[10px] font-mono uppercase tracking-widest text-red-300/70 hover:text-red-200 shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         {docType === "invoice" ? (
           <div className="mb-8 print:hidden rounded-xl border border-brand-border bg-brand-charcoal/40 p-5">
             <p className="text-[10px] font-mono uppercase tracking-widest text-brand-gold mb-4">

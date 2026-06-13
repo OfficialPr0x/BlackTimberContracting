@@ -1,3 +1,5 @@
+{{GUIDE_COVER}}
+
 # Black Timber Field Guide: The Kootenay Homeowner Project Readiness & Resilience Manual
 
 *Last updated: 10 June 2026*

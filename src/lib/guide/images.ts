@@ -1,5 +1,11 @@
 /** Field guide hero & section photography — 16:9 Cloudinary assets. */
 
+export const GUIDE_COVER_URL =
+  "https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1781332395/ChatGPT_Image_Jun_13_2026_12_31_50_AM_g4vcsu.png";
+
+export const GUIDE_COVER_ALT =
+  "The Kootenay Homeowner Field Guide — project readiness, mountain home protection, and renovation planning for Fernie, Sparwood, Elkford, Cranbrook, and Nelson";
+
 export interface GuideImage {
   id: number;
   url: string;
@@ -120,4 +126,16 @@ export function injectGuideImages(markdown: string): string {
     const id = Number(raw);
     return guideImageMarkdown(id);
   });
+}
+
+export function injectGuideCover(markdown: string): string {
+  if (!markdown.includes("{{GUIDE_COVER}}")) return markdown;
+
+  const cover = `
+<div class="guide-cover">
+  <img src="${GUIDE_COVER_URL}" alt="${GUIDE_COVER_ALT.replace(/"/g, "&quot;")}" loading="eager" />
+</div>
+`.trim();
+
+  return markdown.replace(/\{\{GUIDE_COVER\}\}/g, cover);
 }

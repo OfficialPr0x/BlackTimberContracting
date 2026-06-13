@@ -428,6 +428,27 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ── Guide cover hero (top of manual) ─────────────────────── */
+.prose-guide .guide-cover {
+  margin: 0 0 2rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid #e3ded4;
+  background: #0b0a09;
+  box-shadow: 0 20px 56px -28px rgba(11, 10, 9, 0.55);
+  break-inside: avoid;
+}
+.prose-guide .guide-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* ── Anchored headings (offset for sticky header) ──────────── */
 .prose-guide h2,
 .prose-guide h3 {

@@ -484,6 +484,25 @@ export default function Home() {
             </span>
           </div>
         </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-brand-border/60 flex justify-center">
+          <a
+            href="https://www.kootenaysignal.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center gap-2 text-brand-gray/70 hover:text-white transition-colors"
+          >
+            <img
+              src="https://res.cloudinary.com/dkc1pmbma/image/upload/q_auto/f_auto/v1781382392/Untitled_design_ntahba.png"
+              alt="Kootenay Signal"
+              className="h-6 w-auto rounded opacity-70 group-hover:opacity-100 transition-opacity"
+              draggable={false}
+            />
+            <span className="uppercase tracking-wider">
+              Built by <span className="text-white/90 group-hover:text-brand-gold font-semibold">Kootenay Signal</span>
+            </span>
+          </a>
+        </div>
       </footer>
 
       {/* ─────────────── GLOBAL MODALS ─────────────── */}

@@ -54,9 +54,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
   },
   {
     href: "/admin/concierge",
-    label: "Concierge",
-    shortLabel: "Chat",
-    description: "Talk or voice — your ops assistant",
+    label: "Onsite Estimator",
+    shortLabel: "Quote",
+    description: "Photos + voice → live estimates, quotes & invoices",
     icon: MessageCircle,
   },
 ];

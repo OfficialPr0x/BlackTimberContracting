@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 import SiteLeadsCRM from "@/components/admin/leads/SiteLeadsCRM";
 import PopupSubsCRM from "@/components/admin/leads/PopupSubsCRM";
+import {
+  LeadCheckbox,
+  LeadSelectionBar,
+  useLeadSelection,
+} from "@/components/admin/leads/LeadSelectionBar";
 import Markdown from "@/components/Markdown";
 import type { ProspectSearchOutput } from "@/lib/leads/prospect-schemas";
 import type { ProspectLeadRow } from "@/lib/leads/prospect-types";
@@ -134,6 +139,10 @@ export default function LeadsWorkspace() {
 
   const [prospects, setProspects] = useState<ProspectLeadRow[]>([]);
   const [loadingPipeline, setLoadingPipeline] = useState(true);
+  const [deletingProspects, setDeletingProspects] = useState(false);
+
+  const prospectIds = prospects.map((p) => p.id);
+  const prospectSelection = useLeadSelection(prospectIds);
 
   const loadPipeline = useCallback(async () => {
     const res = await fetch("/api/admin/leads/prospects");
@@ -193,6 +202,33 @@ export default function LeadsWorkspace() {
       body: JSON.stringify({ notes }),
     });
     await loadPipeline();
+  };
+
+  const deleteSelectedProspects = async () => {
+    const ids = [...prospectSelection.selected];
+    if (!ids.length) return;
+    if (
+      !confirm(
+        `Delete ${ids.length} prospect${ids.length === 1 ? "" : "s"} permanently? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingProspects(true);
+    setError(null);
+    try {
+      for (const id of ids) {
+        const res = await fetch(`/api/admin/leads/prospects/${id}`, { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error?.message ?? "Delete failed");
+      }
+      prospectSelection.clear();
+      await loadPipeline();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeletingProspects(false);
+    }
   };
 
   return (
@@ -348,7 +384,9 @@ export default function LeadsWorkspace() {
             </section>
           ) : null}
         </div>
-      ) : (
+      ) : null}
+
+      {tab === "pipeline" ? (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] font-mono uppercase tracking-widest text-brand-gray">
@@ -362,6 +400,14 @@ export default function LeadsWorkspace() {
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
+          <LeadSelectionBar
+            selectedCount={prospectSelection.selectedCount}
+            totalCount={prospects.length}
+            allSelected={prospectSelection.allSelected}
+            onToggleAll={prospectSelection.toggleAll}
+            onDelete={deleteSelectedProspects}
+            deleting={deletingProspects}
+          />
           {loadingPipeline ? (
             <p className="text-xs text-brand-gray font-mono">Loading…</p>
           ) : prospects.length === 0 ? (
@@ -377,11 +423,18 @@ export default function LeadsWorkspace() {
                   className="rounded-xl border border-brand-border bg-brand-charcoal/40 p-4 space-y-2"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-white">{p.companyName}</p>
-                      <p className="text-[10px] text-brand-gray">
-                        {p.location ?? "—"} · {p.prospectType.replace(/_/g, " ")}
-                      </p>
+                    <div className="flex items-start gap-3 min-w-0">
+                      <LeadCheckbox
+                        checked={prospectSelection.selected.has(p.id)}
+                        onChange={() => prospectSelection.toggle(p.id)}
+                        ariaLabel={`Select ${p.companyName}`}
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-white">{p.companyName}</p>
+                        <p className="text-[10px] text-brand-gray">
+                          {p.location ?? "—"} · {p.prospectType.replace(/_/g, " ")}
+                        </p>
+                      </div>
                     </div>
                     <span
                       className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
@@ -434,7 +487,7 @@ export default function LeadsWorkspace() {
             </ul>
           )}
         </section>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader, RefreshCw, ChevronDown, ChevronUp, Mail, Phone } from "lucide-react";
+import {
+  LeadCheckbox,
+  LeadSelectionBar,
+  useLeadSelection,
+} from "@/components/admin/leads/LeadSelectionBar";
 import type { SiteLeadRow, SiteLeadStatus } from "@/lib/leads/site-leads-types";
 
 const STATUS_OPTIONS: SiteLeadStatus[] = [
@@ -67,6 +72,11 @@ export default function SiteLeadsCRM() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | SiteLeadStatus>("all");
   const [supabaseOk, setSupabaseOk] = useState<boolean | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const visible = filter === "all" ? leads : leads.filter((l) => l.status === filter);
+  const visibleIds = visible.map((l) => l.id);
+  const selection = useLeadSelection(visibleIds);
 
   const load = useCallback(async () => {
     setError(null);
@@ -92,7 +102,34 @@ export default function SiteLeadsCRM() {
     await load();
   };
 
-  const visible = filter === "all" ? leads : leads.filter((l) => l.status === filter);
+  const deleteSelected = async () => {
+    const ids = [...selection.selected];
+    if (!ids.length) return;
+    if (
+      !confirm(
+        `Delete ${ids.length} lead${ids.length === 1 ? "" : "s"} permanently? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      for (const id of ids) {
+        const res = await fetch(`/api/admin/leads/site/${id}`, { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error?.message ?? "Delete failed");
+      }
+      selection.clear();
+      if (expanded && ids.includes(expanded)) setExpanded(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -149,6 +186,15 @@ export default function SiteLeadsCRM() {
         </p>
       ) : null}
 
+      <LeadSelectionBar
+        selectedCount={selection.selectedCount}
+        totalCount={visible.length}
+        allSelected={selection.allSelected}
+        onToggleAll={selection.toggleAll}
+        onDelete={deleteSelected}
+        deleting={deleting}
+      />
+
       {visible.length === 0 ? (
         <p className="text-xs text-brand-gray py-6 text-center border border-dashed border-brand-border rounded-xl">
           No quotes or bookings yet. Complete the quote wizard on the site to test.
@@ -161,7 +207,13 @@ export default function SiteLeadsCRM() {
               className="rounded-xl border border-brand-border bg-brand-charcoal/40 p-4 space-y-3"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1 min-w-0">
+                <div className="flex items-start gap-3 min-w-0">
+                  <LeadCheckbox
+                    checked={selection.selected.has(lead.id)}
+                    onChange={() => selection.toggle(lead.id)}
+                    ariaLabel={`Select ${lead.name}`}
+                  />
+                  <div className="space-y-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-medium text-white">{lead.name}</p>
                     <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-brand-panel text-brand-gold border border-brand-border">
@@ -190,6 +242,7 @@ export default function SiteLeadsCRM() {
                     <span className="font-mono">{fmtWhen(lead.createdAt)}</span>
                   </div>
                   <LeadSummary lead={lead} />
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">

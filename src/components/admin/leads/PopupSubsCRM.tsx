@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BookOpen, Loader, Mail, RefreshCw, Copy, Check } from "lucide-react";
+import {
+  LeadCheckbox,
+  LeadSelectionBar,
+  useLeadSelection,
+} from "@/components/admin/leads/LeadSelectionBar";
 import type { SiteLeadRow } from "@/lib/leads/site-leads-types";
 
 function fmtWhen(iso: string): string {
@@ -20,6 +25,10 @@ export default function PopupSubsCRM() {
   const [error, setError] = useState<string | null>(null);
   const [supabaseOk, setSupabaseOk] = useState<boolean | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const subIds = subs.map((s) => s.id);
+  const selection = useLeadSelection(subIds);
 
   const load = useCallback(async () => {
     setError(null);
@@ -50,6 +59,33 @@ export default function PopupSubsCRM() {
     await navigator.clipboard.writeText(list);
     setCopied("all");
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const deleteSelected = async () => {
+    const ids = [...selection.selected];
+    if (!ids.length) return;
+    if (
+      !confirm(
+        `Delete ${ids.length} subscriber${ids.length === 1 ? "" : "s"} permanently? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      for (const id of ids) {
+        const res = await fetch(`/api/admin/leads/site/${id}`, { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error?.message ?? "Delete failed");
+      }
+      selection.clear();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -112,6 +148,15 @@ export default function PopupSubsCRM() {
         </p>
       ) : null}
 
+      <LeadSelectionBar
+        selectedCount={selection.selectedCount}
+        totalCount={subs.length}
+        allSelected={selection.allSelected}
+        onToggleAll={selection.toggleAll}
+        onDelete={deleteSelected}
+        deleting={deleting}
+      />
+
       {subs.length === 0 ? (
         <p className="text-xs text-brand-gray py-8 text-center border border-dashed border-brand-border rounded-xl">
           No popup subscribers yet. Submit the exit-intent form on the homepage (mouse toward the browser tab bar)
@@ -122,6 +167,13 @@ export default function PopupSubsCRM() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-brand-border bg-brand-panel/80 text-[9px] font-mono uppercase tracking-wider text-brand-gray">
+                <th className="px-4 py-3 font-normal w-10">
+                  <LeadCheckbox
+                    checked={selection.allSelected}
+                    onChange={() => selection.toggleAll()}
+                    ariaLabel="Select all subscribers"
+                  />
+                </th>
                 <th className="px-4 py-3 font-normal">Name</th>
                 <th className="px-4 py-3 font-normal">Email</th>
                 <th className="px-4 py-3 font-normal">Offer / Page</th>
@@ -137,6 +189,13 @@ export default function PopupSubsCRM() {
                 const page = (p.page as string) ?? "/";
                 return (
                   <tr key={sub.id} className="border-b border-brand-border/60 hover:bg-brand-charcoal/30">
+                    <td className="px-4 py-3">
+                      <LeadCheckbox
+                        checked={selection.selected.has(sub.id)}
+                        onChange={() => selection.toggle(sub.id)}
+                        ariaLabel={`Select ${sub.name}`}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{sub.name}</td>
                     <td className="px-4 py-3">
                       <a

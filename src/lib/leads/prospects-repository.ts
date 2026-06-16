@@ -94,6 +94,23 @@ export async function listProspectLeads(limit = 80): Promise<ProspectLeadRow[]> 
   }));
 }
 
+export async function deleteProspectLeads(ids: string[]): Promise<number> {
+  if (!ids.length) return 0;
+  const sb = getSupabaseAdmin();
+  if (!sb || !isSupabaseConfigured()) return 0;
+
+  const { error } = await sb.from("prospect_leads").delete().in("id", ids);
+  if (error) {
+    console.error("[delete prospect_leads]", error.message);
+    return 0;
+  }
+  return ids.length;
+}
+
+export async function deleteProspectLead(id: string): Promise<boolean> {
+  return (await deleteProspectLeads([id])) === 1;
+}
+
 export async function updateProspectLead(
   id: string,
   patch: { status?: string; notes?: string }

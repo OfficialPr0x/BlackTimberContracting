@@ -1,6 +1,6 @@
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
 import { requireAdminRoute } from "@/lib/admin/session";
-import { updateProspectLead } from "@/lib/leads/prospects-repository";
+import { deleteProspectLead, updateProspectLead } from "@/lib/leads/prospects-repository";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -12,6 +12,25 @@ const PatchBody = z.object({
     .optional(),
   notes: z.string().max(4000).optional(),
 });
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = await requireAdminRoute();
+    if (!auth.ok) return auth.response;
+
+    const { id } = await ctx.params;
+    const ok = await deleteProspectLead(id);
+    if (!ok) {
+      return Response.json({ error: { message: "Delete failed" } }, { status: 500 });
+    }
+    return Response.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
 
 export async function PATCH(
   req: Request,

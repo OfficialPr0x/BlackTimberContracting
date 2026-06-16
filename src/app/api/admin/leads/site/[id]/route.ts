@@ -1,6 +1,6 @@
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
 import { requireAdminRoute } from "@/lib/admin/session";
-import { updateSiteLead } from "@/lib/leads/site-leads-repository";
+import { deleteSiteLead, updateSiteLead } from "@/lib/leads/site-leads-repository";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -11,6 +11,25 @@ const PatchBody = z.object({
   tags: z.array(z.string().max(80)).max(20).optional(),
   notes: z.string().max(4000).optional(),
 });
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = await requireAdminRoute();
+    if (!auth.ok) return auth.response;
+
+    const { id } = await ctx.params;
+    const ok = await deleteSiteLead(id);
+    if (!ok) {
+      return Response.json({ error: { message: "Delete failed" } }, { status: 500 });
+    }
+    return Response.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
 
 export async function PATCH(
   req: Request,

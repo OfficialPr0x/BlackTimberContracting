@@ -111,6 +111,23 @@ export async function listPopupSubs(limit = 150): Promise<SiteLeadRow[]> {
   return queryLeads(limit, { source: "exit_intent" });
 }
 
+export async function deleteSiteLeads(ids: string[]): Promise<number> {
+  if (!ids.length) return 0;
+  const sb = getSupabaseAdmin();
+  if (!sb || !isSupabaseConfigured()) return 0;
+
+  const { error } = await sb.from("leads").delete().in("id", ids);
+  if (error) {
+    console.error("[delete leads]", error.message);
+    return 0;
+  }
+  return ids.length;
+}
+
+export async function deleteSiteLead(id: string): Promise<boolean> {
+  return (await deleteSiteLeads([id])) === 1;
+}
+
 export async function updateSiteLead(
   id: string,
   patch: { status?: SiteLeadStatus; tags?: string[]; notes?: string | null }

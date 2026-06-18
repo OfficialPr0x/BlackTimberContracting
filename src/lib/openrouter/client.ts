@@ -211,6 +211,8 @@ interface ChatJSONOptions<T> {
   jsonObject?: boolean;
   /** Cap how many models in the fallback chain to try. Default: entire chain. */
   maxModels?: number;
+  /** Max output tokens. Raise for large JSON arrays to avoid truncation. */
+  maxTokens?: number;
   /** Pass-through provider routing if you need OpenAI/Anthropic-specific options. */
   extraBody?: Record<string, unknown>;
 }
@@ -241,6 +243,7 @@ export async function chatJSON<T>(opts: ChatJSONOptions<T>): Promise<T> {
           messages: opts.messages,
           temperature: opts.temperature ?? 0.2,
           response_format: responseFormat,
+          ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
           // OpenRouter usage accounting (cost in USD) — opt-in per request.
           usage: { include: true },
           ...opts.extraBody,
@@ -435,17 +438,105 @@ function extractJSON(raw: string): unknown {
   const trimmed = raw.trim();
   // Strip ```json ... ``` or ``` ... ``` fences if the model added them.
   const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  const body = fenceMatch ? fenceMatch[1] : trimmed;
+  let body = fenceMatch ? fenceMatch[1] : trimmed;
+
+  // Some models prepend prose before the JSON. Slice from the first { or [ to
+  // the last matching } or ] so leading/trailing chatter doesn't break parsing.
+  const firstObj = body.indexOf("{");
+  const firstArr = body.indexOf("[");
+  const start =
+    firstObj === -1 ? firstArr : firstArr === -1 ? firstObj : Math.min(firstObj, firstArr);
+  if (start > 0) body = body.slice(start);
+
+  // Fast path.
   try {
     return JSON.parse(body);
-  } catch (err) {
-    throw new AiError({
-      code: "schema_violation",
-      status: 502,
-      clientMessage: "AI returned malformed JSON.",
-      message: `JSON.parse failed: ${(err as Error).message}. Raw: ${body.slice(0, 200)}`,
-    });
+  } catch {
+    /* fall through to repair */
   }
+
+  // Repair path: providers (esp. fast models) sometimes truncate long arrays.
+  // Close any open string + balance brackets so we can salvage the prefix.
+  const repaired = repairTruncatedJson(body);
+  if (repaired) {
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      /* fall through to error */
+    }
+  }
+
+  throw new AiError({
+    code: "schema_violation",
+    status: 502,
+    clientMessage: "AI returned malformed JSON.",
+    message: `JSON.parse failed even after repair. Raw (first 300): ${body.slice(0, 300)}`,
+  });
+}
+
+/**
+ * Best-effort repair of a truncated JSON document: walks the string tracking
+ * depth + string state, drops a trailing partial token, then appends the
+ * closing quotes/brackets needed to make it parseable. Returns null if it can't
+ * find a sane truncation point.
+ */
+function repairTruncatedJson(input: string): string | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastSafe = -1; // index just after the last complete value (`}` `]` `"` or digit)
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') {
+        inString = false;
+        lastSafe = i + 1;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{" || ch === "[") {
+      stack.push(ch);
+    } else if (ch === "}" || ch === "]") {
+      stack.pop();
+      lastSafe = i + 1;
+    } else if (ch === "," ) {
+      lastSafe = i; // can cut the dangling element before a comma
+    } else if (/[0-9truefalsn.eE+-]/.test(ch)) {
+      lastSafe = i + 1;
+    }
+  }
+
+  if (lastSafe <= 0) return null;
+
+  // Cut at the last complete value, dropping any partial trailing element + comma.
+  let out = input.slice(0, lastSafe).replace(/,\s*$/, "");
+
+  // Re-balance using a fresh scan of the truncated output.
+  const closers: string[] = [];
+  let s = false;
+  let esc = false;
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i];
+    if (s) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') s = false;
+      continue;
+    }
+    if (ch === '"') s = true;
+    else if (ch === "{") closers.push("}");
+    else if (ch === "[") closers.push("]");
+    else if (ch === "}" || ch === "]") closers.pop();
+  }
+  if (s) out += '"'; // close an unterminated string
+  while (closers.length) out += closers.pop();
+
+  return out;
 }
 
 async function safeReadText(res: Response): Promise<string> {

@@ -70,7 +70,9 @@ export async function runProspectSearch(
     `Region: ${input.region}`,
     "",
     "Find high-value B2B prospects for subcontracting OR collaboration (not homeowner leads).",
-    "Return strict JSON matching ProspectSearchOutput schema.",
+    "Return the 6-12 STRONGEST real prospects (quality over quantity).",
+    "Keep fitReason and collaborationAngle to 1-2 sentences each so the JSON stays compact and complete.",
+    "Return ONLY valid JSON matching ProspectSearchOutput — no markdown, no commentary.",
   ].join("\n");
 
   const messages: ChatMessage[] = [
@@ -102,6 +104,9 @@ export async function runProspectSearch(
     jsonObject: true,
     timeoutMs: serpOn ? 32_000 : 42_000,
     maxModels: 2,
+    // Big output (multiple prospects × long text fields) — give it room so the
+    // JSON isn't truncated mid-array (the "malformed JSON" failure mode).
+    maxTokens: 8000,
     maxUsd: Number(process.env.AI_MAX_USD_PROSPECT ?? "0.85"),
     extraBody,
   });

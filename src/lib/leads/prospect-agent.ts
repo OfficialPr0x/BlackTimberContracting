@@ -129,7 +129,7 @@ async function runSerpBlock(focus: string, region: string) {
     return {
       enabled: false,
       queries: [] as string[],
-      text: "(SerpAPI not configured — set SERPAPI_API_KEY for local Google results.)",
+      text: "(SerpAPI not configured — set SERPAPI_API_KEY or SERPAPI_API in Vercel for Google SERP grounding.)",
     };
   }
 

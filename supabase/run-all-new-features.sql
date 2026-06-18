@@ -18,7 +18,7 @@
 -- Vercel / .env.local also needs:
 --   SUPABASE_SECRET_KEY (sb_secret_…)
 --   RESEND_API_KEY (e-sign emails)
---   SERPAPI_API_KEY (optional, Leads search)
+--   SERPAPI_API_KEY or SERPAPI_API (optional, Leads search)
 --   GEMINI_API_KEY (optional, portfolio vision for Leads)
 --   NEXT_PUBLIC_SITE_URL=https://www.blacktimber.ca
 --

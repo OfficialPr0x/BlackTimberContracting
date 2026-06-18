@@ -57,7 +57,13 @@ const FOCUS_PRESETS = [
 interface IntegrationConfig {
   openRouter: boolean;
   serpApi: boolean;
-  gemini: boolean;
+  serpApiEnvVar: string | null;
+  serpApiVerified: boolean | null;
+  serpApiVerifyError: string | null;
+  geminiDirect: boolean;
+  portfolioVision: boolean;
+  portfolioVisionVia: "gemini_api" | "openrouter" | null;
+  prospectAi: boolean;
   supabase: boolean;
   prospectModel: string;
 }
@@ -135,6 +141,7 @@ export default function LeadsWorkspace() {
   const [result, setResult] = useState<ProspectSearchOutput | null>(null);
   const [meta, setMeta] = useState<Record<string, boolean | string> | null>(null);
   const [config, setConfig] = useState<IntegrationConfig | null>(null);
+  const [serpTesting, setSerpTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [prospects, setProspects] = useState<ProspectLeadRow[]>([]);
@@ -160,6 +167,19 @@ export default function LeadsWorkspace() {
       .catch((e) => setError(e instanceof Error ? e.message : "Load failed"))
       .finally(() => setLoadingPipeline(false));
   }, [loadPipeline]);
+
+  const testSerpApi = async () => {
+    setSerpTesting(true);
+    try {
+      const res = await fetch("/api/admin/leads/config?verifySerp=1");
+      const c = (await res.json()) as IntegrationConfig;
+      setConfig(c);
+    } catch {
+      /* keep existing config */
+    } finally {
+      setSerpTesting(false);
+    }
+  };
 
   const runSearch = async () => {
     setSearching(true);
@@ -247,19 +267,64 @@ export default function LeadsWorkspace() {
             ? "Exit-intent email signups from the Before You Leave deck guide popup"
             : tab === "site"
               ? "AI quote wizard estimates and consultation bookings from the public site"
-              : "Portfolio vision · SerpAPI · Perplexity web search — matched to what Black Timber actually builds"}
+              : "Portfolio vision · SerpAPI · OpenRouter web search — matched to what Black Timber actually builds"}
         </p>
       </header>
 
       {config ? (
-        <div className="flex flex-wrap gap-2 text-[9px] font-mono uppercase tracking-wider">
-          <StatusPill ok={config.openRouter} label="OpenRouter" />
-          <StatusPill ok={config.serpApi} label="SerpAPI" />
-          <StatusPill ok={config.gemini} label="Gemini vision" />
-          <StatusPill ok={config.supabase} label="Supabase save" />
-          <span className="text-brand-gray px-2 py-1 rounded border border-brand-border">
-            {config.prospectModel.split("/").pop()}
-          </span>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2 text-[9px] font-mono uppercase tracking-wider">
+            <StatusPill ok={config.openRouter} label="OpenRouter" />
+            <StatusPill
+              ok={config.serpApi}
+              label={
+                config.serpApi && config.serpApiEnvVar
+                  ? `SerpAPI (${config.serpApiEnvVar})`
+                  : "SerpAPI"
+              }
+            />
+            <StatusPill
+              ok={config.portfolioVision}
+              label={
+                config.portfolioVisionVia === "gemini_api"
+                  ? "Vision (Gemini API)"
+                  : config.portfolioVisionVia === "openrouter"
+                    ? "Vision (OpenRouter)"
+                    : "Portfolio vision"
+              }
+            />
+            <StatusPill
+              ok={config.prospectAi}
+              label={`Prospect · ${config.prospectModel.split("/").pop() ?? "sonar-pro"}`}
+            />
+            <StatusPill ok={config.supabase} label="Supabase save" />
+            {config.serpApi ? (
+              <button
+                type="button"
+                onClick={() => void testSerpApi()}
+                disabled={serpTesting}
+                className="px-2 py-1 rounded border border-brand-border text-brand-gray hover:text-brand-gold hover:border-brand-gold/40 disabled:opacity-50"
+              >
+                {serpTesting
+                  ? "Testing SerpAPI…"
+                  : config.serpApiVerified === true
+                    ? "SerpAPI verified ✓"
+                    : "Test SerpAPI"}
+              </button>
+            ) : null}
+          </div>
+          {!config.serpApi ? (
+            <p className="text-[10px] text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+              SerpAPI is off — prospect search will rely on AI web search only. Add{" "}
+              <code className="text-brand-gold">SERPAPI_API_KEY</code> or{" "}
+              <code className="text-brand-gold">SERPAPI_API</code> in Vercel (Production +
+              Preview), then redeploy.
+            </p>
+          ) : config.serpApiVerified === false && config.serpApiVerifyError ? (
+            <p className="text-[10px] text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+              SerpAPI key found ({config.serpApiEnvVar}) but test failed: {config.serpApiVerifyError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

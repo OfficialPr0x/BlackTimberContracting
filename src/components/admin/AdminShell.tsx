@@ -21,7 +21,8 @@ interface AdminShellProps {
 
 export default function AdminShell({ children, banner }: AdminShellProps) {
   const pathname = usePathname() ?? "/admin";
-  const isBookkeeper = pathname.startsWith("/admin/bookkeeper");
+  const isFullBleed =
+    pathname.startsWith("/admin/bookkeeper") || pathname.startsWith("/admin/inbox");
 
   return (
     <div className="min-h-[100dvh] bg-brand-black text-foreground flex flex-col lg:flex-row print:min-h-0">
@@ -105,7 +106,7 @@ export default function AdminShell({ children, banner }: AdminShellProps) {
 
         <main
           className={
-            isBookkeeper
+            isFullBleed
               ? "flex-1 flex flex-col min-h-0 overflow-hidden pb-20 lg:pb-4 px-0 py-0 lg:px-0 lg:py-0 w-full max-w-none"
               : "flex-1 overflow-y-auto pb-24 lg:pb-8 px-4 py-5 lg:px-8 lg:py-8 max-w-6xl mx-auto w-full"
           }
@@ -118,7 +119,7 @@ export default function AdminShell({ children, banner }: AdminShellProps) {
           className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-brand-border bg-brand-charcoal/95 backdrop-blur-md safe-area-pb"
           aria-label="Admin navigation"
         >
-          <ul className="grid grid-cols-6 gap-0">
+          <ul className="grid grid-cols-7 gap-0">
             {ADMIN_NAV.map((item) => {
               const active = isAdminNavActive(pathname, item.href);
               const Icon = item.icon;

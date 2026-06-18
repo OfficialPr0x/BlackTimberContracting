@@ -6,6 +6,7 @@ import {
   MessageCircle,
   PenLine,
   Target,
+  Mail,
 } from "lucide-react";
 
 export interface AdminNavItem {
@@ -23,6 +24,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     shortLabel: "Home",
     description: "Overview, quick actions, recent work",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/admin/inbox",
+    label: "Inbox",
+    shortLabel: "Mail",
+    description: "Send & receive email · custom mailboxes",
+    icon: Mail,
   },
   {
     href: "/admin/quotes",

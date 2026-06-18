@@ -29,6 +29,13 @@ Include sections:
 
 Be factual — only describe what you see.`;
 
+export const FALLBACK_BRIEF = `
+Black Timber Contracting (Cranbrook BC, East Kootenay) — custom residential exterior builds:
+multi-level decks, pergolas, garages, additions, roofing, siding, flooring, interior finishing.
+High-end mountain-modern aesthetic; Fernie Home Hardware supply relationships; helical piles / snow load aware.
+Ideal B2B partners: local developers, design-build firms, and GCs needing reliable finish carpentry / exterior subs.
+`.trim();
+
 async function loadImageAsBase64(relativePath: string): Promise<{
   mimeType: string;
   data: string;
@@ -42,18 +49,18 @@ async function loadImageAsBase64(relativePath: string): Promise<{
   }
 }
 
-function visionSamplePaths(): string[] {
+function visionSamplePaths(max = 10): string[] {
   const picks = new Set<string>();
   for (const p of [...HERO_PHOTOS, ...DRAW_RENDER_PHOTOS]) picks.add(p);
   for (let i = 0; i < 6; i++) {
     picks.add(`/jobs/job-${String(10 + i * 11).padStart(2, "0")}.jpg`);
   }
-  return [...picks].slice(0, 10);
+  return [...picks].slice(0, max);
 }
 
-async function briefViaGeminiApi(): Promise<string> {
+async function briefViaGeminiApi(maxImages = 10): Promise<string> {
   const images: Array<{ mimeType: string; data: string }> = [];
-  for (const rel of visionSamplePaths()) {
+  for (const rel of visionSamplePaths(maxImages)) {
     const img = await loadImageAsBase64(rel);
     if (img) images.push(img);
   }
@@ -68,8 +75,13 @@ async function briefViaGeminiApi(): Promise<string> {
   return text;
 }
 
-async function briefViaOpenRouter(): Promise<string> {
+async function briefViaOpenRouter(opts?: {
+  maxImages?: number;
+  timeoutMs?: number;
+  fast?: boolean;
+}): Promise<string> {
   const origin = getSiteOrigin();
+  const maxImages = opts?.maxImages ?? 10;
   const parts: ContentPart[] = [
     {
       type: "text",
@@ -77,7 +89,7 @@ async function briefViaOpenRouter(): Promise<string> {
     },
   ];
 
-  for (const rel of visionSamplePaths()) {
+  for (const rel of visionSamplePaths(maxImages)) {
     parts.push({
       type: "image_url",
       image_url: { url: `${origin}${rel}`, detail: "low" },
@@ -90,32 +102,65 @@ async function briefViaOpenRouter(): Promise<string> {
   ];
 
   const result = await chatJSON({
-    task: "prospect",
+    // Fast path: Gemini Flash (parse chain). Full path: prospect chain for richer analysis.
+    task: opts?.fast ? "parse" : "prospect",
     schema: PortfolioBriefSchema,
     schemaName: "PortfolioBrief",
     messages,
     temperature: 0.15,
     jsonObject: true,
-    timeoutMs: 45_000,
-    maxModels: 2,
+    timeoutMs: opts?.timeoutMs ?? 45_000,
+    maxModels: opts?.fast ? 1 : 2,
   });
 
   return result.capabilitiesMarkdown;
 }
 
+async function generateBrief(opts?: { maxWaitMs?: number }): Promise<string> {
+  const fast = !!opts?.maxWaitMs;
+  if (isGeminiConfigured()) {
+    return briefViaGeminiApi(fast ? 4 : 10);
+  }
+  return briefViaOpenRouter({
+    maxImages: fast ? 4 : 10,
+    timeoutMs: fast ? 18_000 : 45_000,
+    fast,
+  });
+}
+
+export interface PortfolioBriefOptions {
+  /**
+   * When set, skip slow vision on cache miss after this many ms and use FALLBACK_BRIEF.
+   * Keeps prospect search under Vercel's serverless timeout.
+   */
+  maxWaitMs?: number;
+}
+
 /** Cached vision-derived portfolio brief for prospect matching. */
-export async function getPortfolioBrief(): Promise<string> {
+export async function getPortfolioBrief(opts?: PortfolioBriefOptions): Promise<string> {
   if (cachedBrief && Date.now() - cachedBrief.at < CACHE_TTL_MS) {
     return cachedBrief.text;
   }
 
+  if (opts?.maxWaitMs) {
+    try {
+      const text = await Promise.race([
+        generateBrief({ maxWaitMs: opts.maxWaitMs }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("portfolio-brief timeout")), opts.maxWaitMs)
+        ),
+      ]);
+      cachedBrief = { text, at: Date.now() };
+      return text;
+    } catch (err) {
+      console.warn("[portfolio-brief] fast fallback", err);
+      return FALLBACK_BRIEF;
+    }
+  }
+
   let text: string;
   try {
-    if (isGeminiConfigured()) {
-      text = await briefViaGeminiApi();
-    } else {
-      text = await briefViaOpenRouter();
-    }
+    text = await generateBrief();
   } catch (err) {
     console.error("[portfolio-brief]", err);
     text = FALLBACK_BRIEF;
@@ -124,10 +169,3 @@ export async function getPortfolioBrief(): Promise<string> {
   cachedBrief = { text, at: Date.now() };
   return text;
 }
-
-const FALLBACK_BRIEF = `
-Black Timber Contracting (Cranbrook BC, East Kootenay) — custom residential exterior builds:
-multi-level decks, pergolas, garages, additions, roofing, siding, flooring, interior finishing.
-High-end mountain-modern aesthetic; Fernie Home Hardware supply relationships; helical piles / snow load aware.
-Ideal B2B partners: local developers, design-build firms, and GCs needing reliable finish carpentry / exterior subs.
-`.trim();

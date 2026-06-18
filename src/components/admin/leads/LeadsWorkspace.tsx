@@ -190,8 +190,23 @@ export default function LeadsWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ focus, region, saveResults: true }),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error?.message ?? `Search failed (${res.status})`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (body as { error?: { message?: string } })?.error?.message;
+        if (res.status === 504) {
+          throw new Error(
+            msg ??
+              "Search timed out on the server (Vercel limit). Deploy the latest build — we shortened the pipeline. Try again in a moment."
+          );
+        }
+        if (res.status === 502) {
+          throw new Error(
+            msg ??
+              "AI upstream failed. Check OPENROUTER_API_KEY and account credits, then retry."
+          );
+        }
+        throw new Error(msg ?? `Search failed (${res.status})`);
+      }
       const { meta: m, searchRunId, ...output } = body as ProspectSearchOutput & {
         meta?: Record<string, boolean>;
         searchRunId?: string;
@@ -423,8 +438,9 @@ export default function LeadsWorkspace() {
                 ) : null}
                 {meta ? (
                   <p className="text-[9px] font-mono text-brand-gray mt-3">
-                    Serp {meta.serpEnabled ? "✓" : "—"} · Web {meta.webSearchEnabled ? "✓" : "—"} ·
-                    Vision {meta.portfolioBriefUsed ? "✓" : "—"}
+                    Serp {meta.serpEnabled ? "✓" : "—"} ·{" "}
+                    {meta.webSearchEnabled ? "Web (Sonar) ✓" : "Synthesis (Flash) ✓"} · Vision{" "}
+                    {meta.portfolioBriefUsed ? "✓" : "—"}
                     {meta.searchRunId ? ` · run ${String(meta.searchRunId).slice(0, 8)}` : ""}
                   </p>
                 ) : null}

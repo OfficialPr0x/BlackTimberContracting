@@ -5,7 +5,8 @@ import { runProspectSearch } from "@/lib/leads/prospect-agent";
 import { checkRate } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+/** Vercel Pro allows up to 300s; Hobby caps at 60s. Keep search under ~55s wall time. */
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {

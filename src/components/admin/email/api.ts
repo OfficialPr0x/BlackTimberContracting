@@ -33,6 +33,22 @@ export async function fetchMailboxes(): Promise<MailboxListResponse> {
   return jsonOrThrow(await fetch("/api/admin/email/mailboxes", { cache: "no-store" }));
 }
 
+export async function generateSignature(input: {
+  displayName: string;
+  address: string;
+  role?: string;
+  kind?: "personal" | "shared";
+  tone?: "professional" | "warm" | "minimal";
+}): Promise<{ signatureHtml: string }> {
+  return jsonOrThrow(
+    await fetch("/api/admin/email/signature", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
 export async function createMailbox(input: {
   address: string;
   displayName: string;

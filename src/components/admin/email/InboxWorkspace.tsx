@@ -11,16 +11,19 @@ import {
   RefreshCw,
   Search,
   Send,
+  Sparkles,
   Star,
   Tag,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import { buildEmailDocument } from "@/lib/email/sanitize";
 import {
   createMailbox,
   fetchMailboxes,
   fetchMessages,
   fetchThread,
+  generateSignature,
   patchMessage,
   type MessagesResponse,
 } from "./api";
@@ -639,10 +642,40 @@ function NewMailboxDialog({
   const [localPart, setLocalPart] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [kind, setKind] = useState<"personal" | "shared">("personal");
+  const [role, setRole] = useState("");
+  const [tone, setTone] = useState<"professional" | "warm" | "minimal">("professional");
   const [signature, setSignature] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [sigBusy, setSigBusy] = useState(false);
+  const [sigError, setSigError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const domain = (process.env.NEXT_PUBLIC_EMAIL_DOMAIN || "blacktimber.ca").toLowerCase();
+
+  async function generate() {
+    setSigError(null);
+    if (!localPart.trim()) {
+      setSigError("Enter an address first so the AI can build the signature.");
+      return;
+    }
+    setSigBusy(true);
+    try {
+      const address = localPart.includes("@") ? localPart : `${localPart}@${domain}`;
+      const { signatureHtml } = await generateSignature({
+        displayName: displayName.trim() || address,
+        address: address.toLowerCase().trim(),
+        role: role.trim() || undefined,
+        kind,
+        tone,
+      });
+      setSignature(signatureHtml);
+      setShowPreview(true);
+    } catch (err) {
+      setSigError(err instanceof Error ? err.message : "Couldn't generate a signature.");
+    } finally {
+      setSigBusy(false);
+    }
+  }
 
   async function submit() {
     setBusy(true);
@@ -719,15 +752,74 @@ function NewMailboxDialog({
           </div>
           <div>
             <label className="text-[11px] font-mono uppercase tracking-wider text-brand-gray">
-              Signature (optional, HTML)
+              Role / title (optional)
             </label>
+            <input
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="Founder · Project Manager · Estimator"
+              className="w-full mt-1 bg-brand-panel border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-gold/40"
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-brand-gray">
+                Signature (optional, HTML)
+              </label>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value as typeof tone)}
+                  className="bg-brand-panel border border-brand-border rounded-md px-1.5 py-1 text-[11px] text-brand-gray outline-none focus:border-brand-gold/40"
+                  title="Tone"
+                >
+                  <option value="professional">Professional</option>
+                  <option value="warm">Warm</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={generate}
+                  disabled={sigBusy}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-gold/15 border border-brand-gold/30 text-[11px] font-medium text-brand-gold hover:bg-brand-gold/25 disabled:opacity-50"
+                >
+                  {sigBusy ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {sigBusy ? "Generating…" : "Generate with AI"}
+                </button>
+              </div>
+            </div>
             <textarea
               value={signature}
               onChange={(e) => setSignature(e.target.value)}
               rows={3}
-              placeholder="— Jaryd, Black Timber Contracting"
+              placeholder="— Jaryd, Black Timber Contracting (or generate one with AI)"
               className="w-full mt-1 bg-brand-panel border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-gold/40 resize-y"
             />
+            {sigError && <p className="text-xs text-red-400 mt-1">{sigError}</p>}
+            {signature.trim() && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPreview((v) => !v)}
+                  className="text-[11px] text-brand-gray hover:text-brand-gold"
+                >
+                  {showPreview ? "Hide preview" : "Show preview"}
+                </button>
+                {showPreview && (
+                  <iframe
+                    title="signature-preview"
+                    srcDoc={buildEmailDocument(signature, { dark: true })}
+                    sandbox=""
+                    className="w-full h-28 mt-1 bg-brand-panel rounded-lg border border-brand-border"
+                  />
+                )}
+              </div>
+            )}
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>

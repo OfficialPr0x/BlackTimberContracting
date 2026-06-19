@@ -477,6 +477,7 @@ as $$
   from (
     select
       id,
+      document_type as "documentType",
       customer_name as "customerName",
       grand_total_cad as "grandTotalCAD",
       to_char(timezone('UTC', updated_at), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt",

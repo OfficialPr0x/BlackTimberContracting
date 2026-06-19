@@ -12,12 +12,18 @@ export const dynamic = "force-dynamic";
 export default async function AdminQuotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; convert?: string }>;
 }) {
   const params = await searchParams;
   const editId =
     typeof params.edit === "string" && /^[QEI]-\d{8}-[A-Z0-9]{4}$/.test(params.edit)
       ? params.edit
+      : undefined;
+  const convertTo =
+    params.convert === "quote" ||
+    params.convert === "estimate" ||
+    params.convert === "invoice"
+      ? params.convert
       : undefined;
 
   let recentQuotes: Awaited<ReturnType<typeof listQuotes>> = [];
@@ -42,6 +48,7 @@ export default async function AdminQuotesPage({
       </header>
       <QuoteBuilder
         editId={editId}
+        convertTo={convertTo}
         initialRecentQuotes={recentQuotes.map((q) => ({
           id: q.id,
           customerName: q.customer.name,

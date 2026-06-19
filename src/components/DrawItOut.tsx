@@ -31,6 +31,43 @@ interface AiMockupResult {
 const CANVAS_W = 800;
 const CANVAS_H = 500;
 
+// Keep uploaded photos small enough to fit the serverless request body limit.
+// Phone photos are often 5–12 MB; base64 inflates that ~33%, which trips a 413.
+const MAX_PHOTO_DIM = 1600;
+const PHOTO_JPEG_QUALITY = 0.82;
+
+/**
+ * Downscale + re-encode an uploaded image file to a compact JPEG data URL so the
+ * AI request body stays under the platform's body-size limit.
+ */
+function compressImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Couldn't read the image file."));
+    reader.onloadend = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, MAX_PHOTO_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Couldn't process the image."));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY));
+      };
+      img.onerror = () => reject(new Error("That file didn't look like a valid image."));
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function DrawItOut() {
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -269,15 +306,19 @@ export default function DrawItOut() {
     strokeTemplate(ctx, selectedTemplate);
   };
 
-  const handleSitePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSitePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      loadSitePhotoOntoCanvas(reader.result as string, file.name);
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
+    if (!file || !file.type.startsWith("image/")) return;
+    setRenderError(null);
+    try {
+      const dataUrl = await compressImageFile(file);
+      loadSitePhotoOntoCanvas(dataUrl, file.name);
+    } catch (err) {
+      setRenderError(
+        err instanceof Error ? err.message : "Couldn't load that photo. Try a different image."
+      );
+    }
   };
 
   const exportSketch = (): string | undefined => {
@@ -291,7 +332,7 @@ export default function DrawItOut() {
     if (!exportCtx) return undefined;
     exportCtx.drawImage(bg, 0, 0);
     exportCtx.drawImage(draw, 0, 0);
-    return exportCanvas.toDataURL("image/png");
+    return exportCanvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
   };
 
   const handleAiRender = async () => {
@@ -330,6 +371,11 @@ export default function DrawItOut() {
         }),
       });
       if (!res.ok) {
+        if (res.status === 413) {
+          throw new Error(
+            "That photo is too large to send. Try a smaller image — or call 250-910-9071."
+          );
+        }
         const body = await res.json().catch(() => ({} as { error?: { message?: string } }));
         throw new Error(body?.error?.message ?? `Render failed (${res.status})`);
       }

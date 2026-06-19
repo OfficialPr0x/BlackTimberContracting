@@ -7,15 +7,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader, Pencil, Receipt, Trash2 } from "lucide-react";
 import BrandedDocument, { idToDocType } from "@/components/admin/BrandedDocument";
 import DownloadPdfButton from "@/components/pdf/DownloadPdfButton";
 import { documentPdfFilename } from "@/lib/pdf/filename";
 import { downloadDocumentFromPage } from "@/lib/pdf/download-document-pdf";
 import type { BusinessProfile } from "@/lib/business-config";
 import InvoicePaymentTracker from "@/components/admin/InvoicePaymentTracker";
-import type { AdminQuoteSaved, InvoicePaymentSummary } from "@/lib/admin/schemas";
-import { readCachedSavedDocument } from "@/lib/admin/saved-doc-cache";
+import type { AdminDocumentType, AdminQuoteSaved, InvoicePaymentSummary } from "@/lib/admin/schemas";
+import { buildConvertPayload } from "@/lib/admin/draft-helpers";
+import { cacheSavedDocument, readCachedSavedDocument } from "@/lib/admin/saved-doc-cache";
 
 interface QuoteDetailViewProps {
   id: string;
@@ -34,6 +35,7 @@ export default function QuoteDetailView({
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [payments, setPayments] = useState<InvoicePaymentSummary | null>(null);
 
   useEffect(() => {
@@ -76,7 +78,7 @@ export default function QuoteDetailView({
   }, [id, initialQuote]);
 
   useEffect(() => {
-    if (!id.startsWith("I-")) return;
+    if (!quote || (quote.documentType ?? idToDocType(quote.id)) !== "invoice") return;
     let cancelled = false;
     (async () => {
       try {
@@ -90,7 +92,7 @@ export default function QuoteDetailView({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, quote]);
 
   useEffect(() => {
     if (!quote || loading) return;
@@ -113,6 +115,40 @@ export default function QuoteDetailView({
         window.history.replaceState({}, "", window.location.pathname);
       });
   }, [quote, loading]);
+
+  const docType = quote ? (quote.documentType ?? idToDocType(quote.id)) : idToDocType(id);
+
+  const handleConvert = async (newType: AdminDocumentType) => {
+    if (!quote || newType === docType) return;
+    const label = newType === "invoice" ? "invoice" : newType === "estimate" ? "estimate" : "quote";
+    if (
+      !confirm(
+        `Convert ${quote.id} to an ${label}? Line items and customer details stay the same — no new file.`
+      )
+    ) {
+      return;
+    }
+    setConverting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildConvertPayload(quote, newType)),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error?.message ?? "Conversion failed");
+      const saved = body as AdminQuoteSaved;
+      cacheSavedDocument(saved);
+      setQuote(saved);
+      if (newType !== "invoice") setPayments(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Conversion failed");
+    } finally {
+      setConverting(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (
@@ -137,7 +173,21 @@ export default function QuoteDetailView({
     }
   };
 
-  const docType = quote ? (quote.documentType ?? idToDocType(quote.id)) : idToDocType(id);
+  const convertOptions: { type: AdminDocumentType; label: string }[] =
+    docType === "invoice"
+      ? [
+          { type: "quote", label: "Quote" },
+          { type: "estimate", label: "Estimate" },
+        ]
+      : docType === "estimate"
+      ? [
+          { type: "quote", label: "Quote" },
+          { type: "invoice", label: "Invoice" },
+        ]
+      : [
+          { type: "estimate", label: "Estimate" },
+          { type: "invoice", label: "Invoice" },
+        ];
   const headline =
     docType === "invoice" ? "Invoice" : docType === "estimate" ? "Estimate" : "Quote";
 
@@ -191,6 +241,22 @@ export default function QuoteDetailView({
             </span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {convertOptions.map((opt) => (
+              <button
+                key={opt.type}
+                type="button"
+                onClick={() => void handleConvert(opt.type)}
+                disabled={converting || deleting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-gold/40 hover:border-brand-gold hover:bg-brand-gold/10 text-[10px] font-mono uppercase tracking-widest text-brand-gold transition-colors disabled:opacity-50"
+              >
+                {converting ? (
+                  <Loader className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Receipt className="w-3 h-3" />
+                )}
+                Convert to {opt.label}
+              </button>
+            ))}
             <a
               href={`/admin/quotes?edit=${encodeURIComponent(quote.id)}`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-border hover:border-brand-gold text-[10px] font-mono uppercase tracking-widest text-brand-gray hover:text-brand-gold transition-colors"

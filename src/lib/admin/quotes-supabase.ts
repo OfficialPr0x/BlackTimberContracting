@@ -7,7 +7,7 @@ import "server-only";
 import { AiError } from "@/lib/openrouter/errors";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { sanitizeDocumentForRpc } from "./sanitize-document";
-import type { AdminQuoteSaved } from "./schemas";
+import type { AdminDocumentType, AdminQuoteSaved } from "./schemas";
 
 function supabaseHint(message: string): string {
   const m = message.toLowerCase();
@@ -91,6 +91,7 @@ export async function listQuotesSupabase(limit = 50): Promise<AdminQuoteSaved[]>
   const raw = data ?? [];
   const rows = (Array.isArray(raw) ? raw : []) as Array<{
     id: string;
+    documentType?: AdminDocumentType;
     customerName: string;
     grandTotalCAD: number;
     updatedAt: string;
@@ -100,11 +101,9 @@ export async function listQuotesSupabase(limit = 50): Promise<AdminQuoteSaved[]>
   // Sidebar only needs summary fields; fill a minimal AdminQuoteSaved shell.
   return rows.map((row) => ({
     id: row.id,
-    documentType: row.id.startsWith("I-")
-      ? "invoice"
-      : row.id.startsWith("E-")
-      ? "estimate"
-      : "quote",
+    documentType:
+      row.documentType ??
+      (row.id.startsWith("I-") ? "invoice" : row.id.startsWith("E-") ? "estimate" : "quote"),
     status: row.status as AdminQuoteSaved["status"],
     customer: { name: row.customerName },
     project: { type: "other", scopeSummary: "—" },

@@ -66,10 +66,34 @@ export async function getInvoiceGrandTotal(documentId: string): Promise<number |
     .maybeSingle();
 
   if (error || !data) return null;
-  if (data.document_type !== "invoice" && !documentId.startsWith("I-")) {
+  if (data.document_type !== "invoice") {
     return null;
   }
   return Number(data.grand_total_cad);
+}
+
+export async function assertInvoiceDocument(documentId: string): Promise<void> {
+  const sb = requireSb();
+  const { data, error } = await sb
+    .from("documents")
+    .select("document_type")
+    .eq("id", documentId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new AiError({
+      code: "invalid_input",
+      status: 404,
+      clientMessage: "Document not found. Save the invoice first.",
+    });
+  }
+  if (data.document_type !== "invoice") {
+    throw new AiError({
+      code: "invalid_input",
+      status: 400,
+      clientMessage: "Payments apply to invoices only. Convert the document to an invoice first.",
+    });
+  }
 }
 
 export async function listInvoicePayments(documentId: string): Promise<InvoicePayment[]> {
@@ -97,6 +121,7 @@ export async function buildPaymentSummary(
   documentId: string,
   grandTotalCAD?: number
 ): Promise<InvoicePaymentSummary> {
+  await assertInvoiceDocument(documentId);
   const total =
     grandTotalCAD ?? (await getInvoiceGrandTotal(documentId)) ?? 0;
   const payments = await listInvoicePayments(documentId);
@@ -137,13 +162,7 @@ export async function addInvoicePayment(
   input: InvoicePaymentInput,
   createdBy: string
 ): Promise<InvoicePaymentSummary> {
-  if (!documentId.startsWith("I-")) {
-    throw new AiError({
-      code: "invalid_input",
-      status: 400,
-      clientMessage: "Payments can only be recorded on invoices (I-…).",
-    });
-  }
+  await assertInvoiceDocument(documentId);
 
   const grandTotal = await getInvoiceGrandTotal(documentId);
   if (grandTotal == null) {

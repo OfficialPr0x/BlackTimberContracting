@@ -42,8 +42,10 @@ import {
   X,
 } from "lucide-react";
 import {
+  applyDocumentTypeSwitch,
   buildPreviewDocument,
   buildSavePayload,
+  defaultValidUntilForType,
   deriveScopeSummary,
   draftFromSavedQuote,
   PREVIEW_STORAGE_KEY,
@@ -77,6 +79,8 @@ interface QuoteBuilderProps {
   initialRecentQuotes: RecentQuoteSummary[];
   /** Open builder with an existing document loaded for edit */
   editId?: string;
+  /** After loading editId, switch to this document type (e.g. ?convert=invoice) */
+  convertTo?: AdminDocumentType;
 }
 
 const DOC_STATUS_OPTIONS: AdminQuoteSaved["status"][] = [
@@ -199,13 +203,14 @@ function fmtCAD(n: number): string {
 }
 
 function defaultValidUntil(documentType: AdminDocumentType = "quote"): string {
-  const d = new Date();
-  // Invoices: payment-due date defaults to +14 days (Net 14). Quotes: 7-day hold.
-  d.setDate(d.getDate() + (documentType === "invoice" ? 14 : 7));
-  return d.toISOString().slice(0, 10);
+  return defaultValidUntilForType(documentType);
 }
 
-export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuilderProps) {
+export default function QuoteBuilder({
+  initialRecentQuotes,
+  editId,
+  convertTo,
+}: QuoteBuilderProps) {
   const router = useRouter();
 
   // ---- Form state ----------------------------------------------------------
@@ -243,6 +248,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
+  const [savedDocumentType, setSavedDocumentType] = useState<AdminDocumentType | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [recentQuotes, setRecentQuotes] = useState<RecentQuoteSummary[]>(initialRecentQuotes);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
@@ -261,6 +267,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
     setPaymentInstructions(d.paymentInstructions);
     setDocumentStatus(d.status);
     setSavedQuoteId(quote.id);
+    setSavedDocumentType(quote.documentType);
     setError(null);
   }, []);
 
@@ -277,6 +284,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
     setPaymentInstructions("");
     setDocumentStatus("draft");
     setSavedQuoteId(null);
+    setSavedDocumentType(null);
     setError(null);
     router.replace("/admin/quotes");
   }, [router]);
@@ -333,6 +341,32 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
   useEffect(() => {
     if (editId) void loadQuoteForEdit(editId);
   }, [editId, loadQuoteForEdit]);
+
+  useEffect(() => {
+    if (!convertTo || !savedQuoteId || loadingEdit) return;
+    if (convertTo === documentType) return;
+    const { validUntil: nextValidUntil, status: nextStatus } = applyDocumentTypeSwitch(
+      convertTo,
+      documentStatus
+    );
+    setDocumentType(convertTo);
+    setValidUntil(nextValidUntil);
+    setDocumentStatus(nextStatus);
+  }, [convertTo, savedQuoteId, loadingEdit, documentType, documentStatus]);
+
+  const switchDocumentType = useCallback(
+    (nextType: AdminDocumentType) => {
+      if (nextType === documentType) return;
+      const { validUntil: nextValidUntil, status: nextStatus } = applyDocumentTypeSwitch(
+        nextType,
+        documentStatus
+      );
+      setDocumentType(nextType);
+      setValidUntil(nextValidUntil);
+      setDocumentStatus(nextStatus);
+    },
+    [documentStatus, documentType]
+  );
 
   // ---- Live totals (UX only — server is source of truth) -------------------
   const totals = useMemo(() => {
@@ -480,6 +514,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
         }
         cacheSavedDocument(body as AdminQuoteSaved);
         setSavedQuoteId(body.id);
+        setSavedDocumentType(body.documentType);
         setDocumentStatus(body.status as AdminQuoteSaved["status"]);
         router.replace(`/admin/quotes?edit=${encodeURIComponent(body.id)}`, { scroll: false });
         setRecentQuotes((prev) => {
@@ -552,14 +587,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
   //   - Lines: append to the existing list (de-empties the placeholder row).
   const handleParseApply = useCallback((parsed: AdminQuoteParseOutput) => {
     if (parsed.documentType) {
-      setDocumentType(parsed.documentType);
-      setValidUntil((cur) =>
-        // Reset the date if the doc type just changed and the user hadn't
-        // touched it (heuristic: the date still equals one of the defaults).
-        cur === defaultValidUntil("quote") || cur === defaultValidUntil("invoice")
-          ? defaultValidUntil(parsed.documentType)
-          : cur
-      );
+      switchDocumentType(parsed.documentType);
     }
     if (parsed.customer) {
       setCustomer((c) => ({
@@ -607,7 +635,7 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
         return onlyEmpty ? newLines : [...prev, ...newLines];
       });
     }
-  }, []);
+  }, [switchDocumentType]);
 
   // Snapshot for the parser so it knows what fields are already filled.
   const parseFormSnapshot = useMemo(
@@ -634,6 +662,8 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
   // The active document type's metadata, used in JSX below to label things
   // like the action button and the "valid until" / "due date" field.
   const docTypeMeta = DOCUMENT_TYPE_OPTIONS.find((d) => d.value === documentType)!;
+  const pendingTypeConversion =
+    savedQuoteId && savedDocumentType && documentType !== savedDocumentType;
   const dateLabel =
     documentType === "invoice"
       ? "Payment due"
@@ -646,8 +676,6 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
       : documentType === "estimate"
       ? "Save & mark sent"
       : "Save & mark sent";
-
-  const editingLocked = !!savedQuoteId;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
@@ -680,6 +708,16 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
           </div>
         ) : null}
 
+        {pendingTypeConversion ? (
+          <div className="flex items-start gap-2 p-3 rounded-lg border border-brand-gold/40 bg-brand-gold/10 text-sm text-brand-gold">
+            <Receipt className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              Converting to <strong>{docTypeMeta.label.toLowerCase()}</strong> — save to apply.
+              Same document ID ({savedQuoteId}) keeps all line items; no new file needed.
+            </span>
+          </div>
+        ) : null}
+
         {/* ---- Document type tab bar ---- */}
         <div className="flex flex-wrap items-stretch gap-2 p-1.5 rounded-xl border border-brand-border bg-brand-charcoal/40">
           {DOCUMENT_TYPE_OPTIONS.map((opt) => {
@@ -689,23 +727,11 @@ export default function QuoteBuilder({ initialRecentQuotes, editId }: QuoteBuild
               <button
                 key={opt.value}
                 type="button"
-                disabled={editingLocked && !active}
-                onClick={() => {
-                  if (editingLocked) return;
-                  setDocumentType(opt.value);
-                  setValidUntil((cur) =>
-                    cur === defaultValidUntil("quote") || cur === defaultValidUntil("invoice")
-                      ? defaultValidUntil(opt.value)
-                      : cur
-                  );
-                }}
+                onClick={() => switchDocumentType(opt.value)}
                 aria-pressed={active}
-                title={editingLocked && !active ? "Document type is fixed after save" : undefined}
                 className={`flex-1 min-w-[140px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-left transition-colors border ${
                   active
                     ? "bg-brand-gold/15 border-brand-gold text-brand-gold"
-                    : editingLocked
-                    ? "bg-transparent border-transparent text-brand-gray/40 cursor-not-allowed"
                     : "bg-transparent border-transparent text-brand-gray hover:text-white hover:bg-brand-black/30"
                 }`}
               >

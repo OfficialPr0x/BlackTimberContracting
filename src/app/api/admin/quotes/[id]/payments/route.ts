@@ -17,13 +17,6 @@ export async function GET(
     if (!auth.ok) return auth.response;
 
     const { id } = await ctx.params;
-    if (!id.startsWith("I-")) {
-      return Response.json(
-        { error: { message: "Payments apply to invoices only." } },
-        { status: 400 }
-      );
-    }
-
     const summary = await buildPaymentSummary(id);
     return Response.json(summary);
   } catch (err) {
@@ -40,13 +33,6 @@ export async function POST(
     if (!auth.ok) return auth.response;
 
     const { id } = await ctx.params;
-    if (!id.startsWith("I-")) {
-      throw new AiError({
-        code: "invalid_input",
-        status: 400,
-        clientMessage: "Payments apply to invoices only.",
-      });
-    }
 
     const json = await req.json().catch(() => null);
     const parsed = InvoicePaymentInput.safeParse(json);

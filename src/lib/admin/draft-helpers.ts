@@ -120,6 +120,32 @@ export function deriveScopeSummary(
   return `${doc} — ${typeLabel}${mat}${dims}: ${itemSummaries.join("; ")}${more}`;
 }
 
+/** Default valid-until / payment-due date for a document type (YYYY-MM-DD). */
+export function defaultValidUntilForType(documentType: AdminDocumentType = "quote"): string {
+  const d = new Date();
+  d.setDate(d.getDate() + (documentType === "invoice" ? 14 : 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Defaults when switching quote ↔ estimate ↔ invoice on an existing saved document. */
+export function applyDocumentTypeSwitch(
+  newType: AdminDocumentType,
+  currentStatus: AdminQuoteSaved["status"]
+): { validUntil: string; status: AdminQuoteSaved["status"] } {
+  const validUntil = defaultValidUntilForType(newType);
+  let status = currentStatus;
+
+  if (newType === "invoice") {
+    if (currentStatus === "accepted" || currentStatus === "draft") {
+      status = currentStatus === "accepted" ? "sent" : "draft";
+    }
+  } else if (currentStatus === "paid") {
+    status = "accepted";
+  }
+
+  return { validUntil, status };
+}
+
 export function validateDraftForSave(
   customer: AdminQuoteCustomer,
   lines: LineDraft[]
@@ -228,6 +254,46 @@ export function draftFromSavedQuote(quote: AdminQuoteSaved): {
     paymentInstructions: quote.paymentInstructions ?? "",
     status: quote.status,
   };
+}
+
+/** POST body to convert a saved document to another type (same id, same line items). */
+export function buildConvertPayload(
+  quote: AdminQuoteSaved,
+  newType: AdminDocumentType
+): Record<string, unknown> {
+  const { validUntil, status } = applyDocumentTypeSwitch(newType, quote.status);
+  return buildSavePayload({
+    documentType: newType,
+    customer: {
+      name: quote.customer.name,
+      email: quote.customer.email ?? "",
+      phone: quote.customer.phone ?? "",
+      billingAddress: quote.customer.billingAddress ?? "",
+      jobSiteAddress: quote.customer.jobSiteAddress ?? "",
+    },
+    project: quote.project,
+    lines:
+      quote.lines.length > 0
+        ? quote.lines.map((l) => ({
+            id: l.id,
+            description: l.description,
+            quantity: l.quantity,
+            uom: l.uom,
+            unitPriceCAD: l.unitPriceCAD,
+            source: l.source,
+            leadTimeDays: l.leadTimeDays,
+            notes: l.notes,
+          }))
+        : [],
+    taxMode: quote.taxMode,
+    freightCAD: quote.freightCAD,
+    validUntil,
+    status,
+    internalNotes: quote.internalNotes,
+    paymentTerms: quote.paymentTerms ?? "Net 14",
+    paymentInstructions: quote.paymentInstructions ?? "",
+    savedQuoteId: quote.id,
+  });
 }
 
 export function buildSavePayload(input: DraftPayload): Record<string, unknown> {

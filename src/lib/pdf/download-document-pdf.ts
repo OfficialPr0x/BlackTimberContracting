@@ -11,10 +11,11 @@ const LETTER_WIDTH_PT = 612;
 const LETTER_HEIGHT_PT = 792;
 const MARGIN_PT = 20;
 
-export async function downloadElementAsPdf(
-  element: HTMLElement,
-  filename: string
-): Promise<void> {
+/**
+ * Render a printable element into a multi-page letter-size jsPDF document.
+ * Shared by the browser "download" path and the "email this PDF" path.
+ */
+async function renderElementToPdf(element: HTMLElement): Promise<jsPDF> {
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
@@ -78,8 +79,33 @@ export async function downloadElementAsPdf(
     page += 1;
   }
 
-  const safeName = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
-  pdf.save(safeName);
+  return pdf;
+}
+
+function ensurePdfExt(filename: string): string {
+  return filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+}
+
+export async function downloadElementAsPdf(
+  element: HTMLElement,
+  filename: string
+): Promise<void> {
+  const pdf = await renderElementToPdf(element);
+  pdf.save(ensurePdfExt(filename));
+}
+
+/**
+ * Render an element to a PDF and return its base64-encoded bytes (no data-URI
+ * prefix) plus a `.pdf` filename — ready to POST as an email attachment.
+ */
+export async function generateElementPdfBase64(
+  element: HTMLElement,
+  filename: string
+): Promise<{ base64: string; filename: string }> {
+  const pdf = await renderElementToPdf(element);
+  const dataUri = pdf.output("datauristring");
+  const base64 = dataUri.slice(dataUri.indexOf(",") + 1);
+  return { base64, filename: ensurePdfExt(filename) };
 }
 
 export function findPdfDocumentElement(root?: ParentNode): HTMLElement | null {
@@ -96,4 +122,16 @@ export async function downloadDocumentFromPage(
     throw new Error("Document preview is not ready yet.");
   }
   await downloadElementAsPdf(element, filename);
+}
+
+/** Generate the on-page branded document as a base64 PDF for emailing. */
+export async function generateDocumentPdfBase64FromPage(
+  filename: string,
+  root?: ParentNode
+): Promise<{ base64: string; filename: string }> {
+  const element = findPdfDocumentElement(root);
+  if (!element) {
+    throw new Error("Document preview is not ready yet.");
+  }
+  return generateElementPdfBase64(element, filename);
 }

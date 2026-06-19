@@ -5,6 +5,13 @@
 import "server-only";
 import { defaultFromEmail, getResendClient } from "./client";
 
+export interface SendEmailAttachment {
+  filename: string;
+  /** Base64-encoded file contents. */
+  content: string;
+  contentType?: string;
+}
+
 export interface SendEmailOptions {
   to: string | string[];
   subject: string;
@@ -12,6 +19,8 @@ export interface SendEmailOptions {
   /** Defaults to LEAD_FROM_EMAIL or onboarding@resend.dev */
   from?: string;
   replyTo?: string;
+  cc?: string | string[];
+  attachments?: SendEmailAttachment[];
 }
 
 export async function sendEmail(opts: SendEmailOptions): Promise<{ id: string }> {
@@ -23,13 +32,20 @@ export async function sendEmail(opts: SendEmailOptions): Promise<{ id: string }>
   }
 
   const to = Array.isArray(opts.to) ? opts.to : [opts.to];
+  const cc = opts.cc ? (Array.isArray(opts.cc) ? opts.cc : [opts.cc]) : undefined;
 
   const { data, error } = await client.emails.send({
     from: opts.from ?? defaultFromEmail(),
     to,
+    cc,
     subject: opts.subject,
     html: opts.html,
     replyTo: opts.replyTo,
+    attachments: opts.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
   });
 
   if (error) {

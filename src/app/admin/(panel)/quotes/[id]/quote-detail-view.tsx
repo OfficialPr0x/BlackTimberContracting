@@ -7,9 +7,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader, Pencil, Receipt, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader, Mail, Pencil, Receipt, Trash2 } from "lucide-react";
 import BrandedDocument, { idToDocType } from "@/components/admin/BrandedDocument";
 import DownloadPdfButton from "@/components/pdf/DownloadPdfButton";
+import SendDocumentDialog from "@/components/admin/SendDocumentDialog";
 import { documentPdfFilename } from "@/lib/pdf/filename";
 import { downloadDocumentFromPage } from "@/lib/pdf/download-document-pdf";
 import type { BusinessProfile } from "@/lib/business-config";
@@ -37,6 +38,7 @@ export default function QuoteDetailView({
   const [deleting, setDeleting] = useState(false);
   const [converting, setConverting] = useState(false);
   const [payments, setPayments] = useState<InvoicePaymentSummary | null>(null);
+  const [showSend, setShowSend] = useState(false);
 
   useEffect(() => {
     if (initialQuote) return;
@@ -114,6 +116,14 @@ export default function QuoteDetailView({
       .finally(() => {
         window.history.replaceState({}, "", window.location.pathname);
       });
+  }, [quote, loading]);
+
+  useEffect(() => {
+    if (!quote || loading) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("send") !== "1") return;
+    setShowSend(true);
+    window.history.replaceState({}, "", window.location.pathname);
   }, [quote, loading]);
 
   const docType = quote ? (quote.documentType ?? idToDocType(quote.id)) : idToDocType(id);
@@ -273,6 +283,14 @@ export default function QuoteDetailView({
               {deleting ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
               Delete
             </button>
+            <button
+              type="button"
+              onClick={() => setShowSend(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-gold/50 bg-brand-gold/15 hover:bg-brand-gold/25 text-[10px] font-mono uppercase tracking-widest text-brand-gold transition-colors"
+            >
+              <Mail className="w-3 h-3" />
+              Email to customer
+            </button>
             <DownloadPdfButton
               filename={documentPdfFilename({
                 id: quote.id,
@@ -317,6 +335,15 @@ export default function QuoteDetailView({
         ) : null}
         <BrandedDocument quote={quote} business={business} payments={payments} />
       </main>
+
+      {showSend ? (
+        <SendDocumentDialog
+          quote={quote}
+          businessName={business.name}
+          onClose={() => setShowSend(false)}
+          onSent={(status) => setQuote((q) => (q ? { ...q, status } : q))}
+        />
+      ) : null}
     </div>
   );
 }

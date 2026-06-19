@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, AlertCircle } from "lucide-react";
 import { listQuotes } from "@/lib/admin/quotes";
+import {
+  getInvoiceFinanceSummary,
+  type InvoiceFinanceSummary,
+} from "@/lib/admin/invoice-payments";
 import { getSupabaseConfigStatus } from "@/lib/supabase/server";
 import { ADMIN_NAV } from "@/lib/admin/nav";
 import { getBusinessProfile } from "@/lib/business-config";
+import DashboardFinancePanel from "@/components/admin/DashboardFinancePanel";
 
 export const metadata: Metadata = {
   title: "Dashboard · Black Timber Admin",
@@ -27,6 +32,13 @@ export default async function AdminDashboardPage() {
     recentQuotes = await listQuotes(8);
   } catch {
     recentQuotes = [];
+  }
+
+  let finance: InvoiceFinanceSummary | null = null;
+  try {
+    finance = await getInvoiceFinanceSummary();
+  } catch {
+    finance = null;
   }
 
   const pipeline = recentQuotes.reduce((s, q) => s + q.totals.grandTotalCAD, 0);
@@ -68,6 +80,8 @@ export default async function AdminDashboardPage() {
         />
         <StatCard label="Phone" value={business.phone} small />
       </section>
+
+      {finance ? <DashboardFinancePanel summary={finance} /> : null}
 
       <section>
         <h2 className="text-[10px] font-mono uppercase tracking-widest text-brand-gray mb-3">

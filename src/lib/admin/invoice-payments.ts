@@ -202,6 +202,202 @@ export async function addInvoicePayment(
   return buildPaymentSummary(documentId, grandTotal);
 }
 
+// -----------------------------------------------------------------------------
+// Portfolio-wide finance rollup (dashboard)
+// -----------------------------------------------------------------------------
+
+export interface InvoiceFinanceRow {
+  id: string;
+  customerName: string;
+  grandTotalCAD: number;
+  paidCAD: number;
+  balanceCAD: number;
+  status: string;
+  dueDate: string | null;
+  overdue: boolean;
+  lastPaymentAt: string | null;
+}
+
+export interface InvoiceDepositRow {
+  paymentId: string;
+  documentId: string;
+  customerName: string;
+  amountCAD: number;
+  method: InvoicePaymentMethod;
+  paidAt: string;
+}
+
+export interface InvoiceFinanceSummary {
+  invoiceCount: number;
+  /** Sum of every invoice grand total. */
+  totalInvoicedCAD: number;
+  /** Sum of every recorded payment ("deposits made"). */
+  totalCollectedCAD: number;
+  /** Sum of positive per-invoice balances ("outstanding owing"). */
+  outstandingCAD: number;
+  /** Collected portion that counts against invoiced (clamped, never > invoiced). */
+  appliedCollectedCAD: number;
+  paidCount: number;
+  partialCount: number;
+  unpaidCount: number;
+  overdueCount: number;
+  overdueAmountCAD: number;
+  /** appliedCollected / invoiced, 0..1. */
+  collectionRate: number;
+  /** Open invoices (balance > 0), largest balance first. */
+  outstanding: InvoiceFinanceRow[];
+  /** Most recent payments, newest first. */
+  recentDeposits: InvoiceDepositRow[];
+}
+
+/**
+ * Aggregate every invoice and its payments into the figures the dashboard
+ * shows: total invoiced, deposits collected, and outstanding owing. Cheap full
+ * scan — fine for a one-person business; add server-side aggregation if it ever
+ * grows into tens of thousands of rows.
+ */
+export async function getInvoiceFinanceSummary(opts?: {
+  outstandingLimit?: number;
+  depositsLimit?: number;
+}): Promise<InvoiceFinanceSummary> {
+  const sb = requireSb();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [{ data: invoices, error: invErr }, { data: pays, error: payErr }] = await Promise.all([
+    sb
+      .from("documents")
+      .select("id, customer_name, grand_total_cad, status, valid_until")
+      .eq("document_type", "invoice"),
+    sb
+      .from("invoice_payments")
+      .select("id, document_id, amount_cad, method, paid_at, created_at"),
+  ]);
+
+  if (invErr) {
+    throw new AiError({
+      code: "internal",
+      status: 500,
+      clientMessage: "Could not load invoices.",
+      message: invErr.message,
+    });
+  }
+  if (payErr) {
+    throw new AiError({
+      code: "internal",
+      status: 500,
+      clientMessage: "Could not load payments.",
+      message: payErr.message,
+    });
+  }
+
+  const paidByDoc = new Map<string, number>();
+  const lastPayByDoc = new Map<string, string>();
+  for (const p of pays ?? []) {
+    const amt = Number(p.amount_cad);
+    paidByDoc.set(p.document_id, roundCAD((paidByDoc.get(p.document_id) ?? 0) + amt));
+    const at = String(p.paid_at).slice(0, 10);
+    const prev = lastPayByDoc.get(p.document_id);
+    if (!prev || at > prev) lastPayByDoc.set(p.document_id, at);
+  }
+
+  const customerByDoc = new Map<string, string>();
+
+  let totalInvoicedCAD = 0;
+  let totalCollectedCAD = 0;
+  let appliedCollectedCAD = 0;
+  let outstandingCAD = 0;
+  let paidCount = 0;
+  let partialCount = 0;
+  let unpaidCount = 0;
+  let overdueCount = 0;
+  let overdueAmountCAD = 0;
+
+  const rows: InvoiceFinanceRow[] = [];
+
+  for (const inv of invoices ?? []) {
+    const total = Number(inv.grand_total_cad);
+    const paid = paidByDoc.get(inv.id) ?? 0;
+    const balance = roundCAD(Math.max(0, total - paid));
+    const customerName = String(inv.customer_name ?? "—");
+    customerByDoc.set(inv.id, customerName);
+
+    totalInvoicedCAD = roundCAD(totalInvoicedCAD + total);
+    appliedCollectedCAD = roundCAD(appliedCollectedCAD + Math.min(paid, total));
+    outstandingCAD = roundCAD(outstandingCAD + balance);
+
+    if (paid <= 0.005) unpaidCount += 1;
+    else if (balance <= 0.005) paidCount += 1;
+    else partialCount += 1;
+
+    const dueDate = inv.valid_until ? String(inv.valid_until).slice(0, 10) : null;
+    const overdue = balance > 0.005 && !!dueDate && dueDate < today;
+    if (overdue) {
+      overdueCount += 1;
+      overdueAmountCAD = roundCAD(overdueAmountCAD + balance);
+    }
+
+    rows.push({
+      id: inv.id,
+      customerName,
+      grandTotalCAD: total,
+      paidCAD: roundCAD(paid),
+      balanceCAD: balance,
+      status: String(inv.status ?? "draft"),
+      dueDate,
+      overdue,
+      lastPaymentAt: lastPayByDoc.get(inv.id) ?? null,
+    });
+  }
+
+  totalCollectedCAD = roundCAD((pays ?? []).reduce((s, p) => s + Number(p.amount_cad), 0));
+
+  const collectionRate =
+    totalInvoicedCAD > 0 ? Math.min(1, appliedCollectedCAD / totalInvoicedCAD) : 0;
+
+  const outstanding = rows
+    .filter((r) => r.balanceCAD > 0.005)
+    .sort((a, b) => {
+      // Overdue first, then largest balance.
+      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      return b.balanceCAD - a.balanceCAD;
+    })
+    .slice(0, opts?.outstandingLimit ?? 6);
+
+  const recentDeposits: InvoiceDepositRow[] = (pays ?? [])
+    .slice()
+    .sort((a, b) => {
+      const ad = String(a.paid_at);
+      const bd = String(b.paid_at);
+      if (ad !== bd) return bd.localeCompare(ad);
+      return String(b.created_at).localeCompare(String(a.created_at));
+    })
+    .slice(0, opts?.depositsLimit ?? 6)
+    .map((p) => ({
+      paymentId: String(p.id),
+      documentId: String(p.document_id),
+      customerName: customerByDoc.get(String(p.document_id)) ?? "—",
+      amountCAD: Number(p.amount_cad),
+      method: p.method as InvoicePaymentMethod,
+      paidAt: String(p.paid_at).slice(0, 10),
+    }));
+
+  return {
+    invoiceCount: (invoices ?? []).length,
+    totalInvoicedCAD,
+    totalCollectedCAD,
+    outstandingCAD,
+    appliedCollectedCAD,
+    paidCount,
+    partialCount,
+    unpaidCount,
+    overdueCount,
+    overdueAmountCAD,
+    collectionRate,
+    outstanding,
+    recentDeposits,
+  };
+}
+
 export async function deleteInvoicePayment(
   documentId: string,
   paymentId: string

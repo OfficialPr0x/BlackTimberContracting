@@ -40,6 +40,7 @@ import {
   Eye,
   Pencil,
   X,
+  Mail,
 } from "lucide-react";
 import {
   applyDocumentTypeSwitch,
@@ -565,6 +566,11 @@ export default function QuoteBuilder({
     const id = await handleSave();
     if (id) window.open(`/admin/quotes/${id}?download=1`, "_blank", "noopener,noreferrer");
   }, [handleSave]);
+
+  const handleSaveAndEmail = useCallback(async () => {
+    const id = await handleSave();
+    if (id) router.push(`/admin/quotes/${id}?send=1`);
+  }, [handleSave, router]);
 
   // Ctrl+S / Cmd+S quick save
   useEffect(() => {
@@ -1238,6 +1244,15 @@ export default function QuoteBuilder({
             >
               <FileDown className="w-3.5 h-3.5" />
               Save &amp; download PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveAndEmail()}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold/50 text-brand-gold text-sm font-mono uppercase tracking-widest font-bold transition-colors disabled:opacity-50"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              Save &amp; email
             </button>
             <button
               type="button"

@@ -72,7 +72,32 @@ export async function runProspectSearch(
     "Find high-value B2B prospects for subcontracting OR collaboration (not homeowner leads).",
     "Return the 6-12 STRONGEST real prospects (quality over quantity).",
     "Keep fitReason and collaborationAngle to 1-2 sentences each so the JSON stays compact and complete.",
-    "Return ONLY valid JSON matching ProspectSearchOutput — no markdown, no commentary.",
+    "",
+    "Return ONLY a JSON object with EXACTLY this shape (no markdown, no commentary):",
+    JSON.stringify(
+      {
+        summary: "string",
+        prospects: [
+          {
+            companyName: "string",
+            website: "string (optional)",
+            location: "string (optional)",
+            prospectType:
+              "one of: developer | general_contractor | builder | design_build | property_manager | other",
+            fitScore: "integer 0-100",
+            fitReason: "string",
+            collaborationAngle: "string",
+            suggestedContact: "string (optional)",
+            sourceUrl: "string (optional)",
+            portfolioMatchNotes: "string (optional)",
+          },
+        ],
+        searchQueriesUsed: ["string"],
+        nextSteps: ["string"],
+      },
+      null,
+      0
+    ),
   ].join("\n");
 
   const messages: ChatMessage[] = [

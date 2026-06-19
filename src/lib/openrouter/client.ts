@@ -40,8 +40,17 @@ const SCHEMA_CACHE = new Map<string, Record<string, unknown>>();
 function getJsonSchema(schemaName: string, zSchema: z.ZodType): Record<string, unknown> {
   const cached = SCHEMA_CACHE.get(schemaName);
   if (cached) return cached;
-  const raw = z.toJSONSchema(zSchema, { target: "draft-2020-12" }) as Record<string, unknown>;
-  const cleaned = sanitizeForProviders(raw);
+  let cleaned: Record<string, unknown>;
+  try {
+    const raw = z.toJSONSchema(zSchema, { target: "draft-2020-12" }) as Record<string, unknown>;
+    cleaned = sanitizeForProviders(raw);
+  } catch {
+    // Lenient schemas (preprocess/transform for self-healing parsing) can't
+    // always be expressed as JSON Schema. That's fine: such calls use
+    // `jsonObject` mode where this schema is never sent — Zod still validates
+    // the response. Fall back to a permissive object so we never abort here.
+    cleaned = { type: "object", additionalProperties: true };
+  }
   SCHEMA_CACHE.set(schemaName, cleaned);
   return cleaned;
 }

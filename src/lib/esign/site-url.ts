@@ -18,6 +18,7 @@ export function getSiteOrigin(): string {
   return "http://localhost:3000";
 }
 
-export function signPortalUrl(token: string): string {
-  return `${getSiteOrigin()}/sign/${token}`;
+/** Public signing link. `slug` is the branded, high-entropy bearer id. */
+export function signPortalUrl(slug: string): string {
+  return `${getSiteOrigin()}/sign/${slug}`;
 }

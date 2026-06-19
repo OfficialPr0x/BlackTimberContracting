@@ -38,6 +38,10 @@ create table if not exists public.esign_envelopes (
   signer_message      text check (signer_message is null or char_length(signer_message) <= 2000),
   document_snapshot   jsonb not null,
   sign_token_hash     text not null unique,
+  slug                text,
+  document_number     text,
+  signature_fields    jsonb,
+  require_address     boolean not null default false,
   expires_at          timestamptz,
   sent_at             timestamptz,
   viewed_at           timestamptz,
@@ -54,6 +58,8 @@ create table if not exists public.esign_envelopes (
 create index if not exists esign_envelopes_status_idx on public.esign_envelopes (status, updated_at desc);
 create index if not exists esign_envelopes_signer_email_idx on public.esign_envelopes (signer_email);
 create index if not exists esign_envelopes_source_ref_idx on public.esign_envelopes (source_ref) where source_ref is not null;
+create unique index if not exists esign_envelopes_slug_idx on public.esign_envelopes (slug) where slug is not null;
+create index if not exists esign_envelopes_document_number_idx on public.esign_envelopes (document_number) where document_number is not null;
 
 drop trigger if exists esign_envelopes_set_updated_at on public.esign_envelopes;
 create trigger esign_envelopes_set_updated_at
@@ -83,5 +89,5 @@ grant all on public.esign_envelopes to service_role;
 grant all on public.esign_events to service_role;
 
 -- =============================================================================
--- DONE — wire app: /admin/esign, /sign/[token], POST sync-quotes optional
+-- DONE — wire app: /admin/esign, /sign/[slug], POST sync-quotes optional
 -- =============================================================================

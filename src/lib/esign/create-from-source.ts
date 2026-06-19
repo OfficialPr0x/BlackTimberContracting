@@ -15,8 +15,9 @@ export async function createEsignFromQuote(params: {
   signerName?: string;
   signerEmail?: string;
   signerMessage?: string;
+  requireAddress?: boolean;
   sendNow?: boolean;
-}): Promise<{ envelope: EsignEnvelopeDetail; signToken: string; emailErrors: string[] }> {
+}): Promise<{ envelope: EsignEnvelopeDetail; signSlug: string; emailErrors: string[] }> {
   const snap = await snapshotFromQuoteId(params.documentId);
   if (!snap || snap.kind !== "quote") {
     throw new AiError({
@@ -37,6 +38,7 @@ export async function createEsignFromQuote(params: {
     documentSnapshot: snap,
     sourceType: "quote",
     sourceRef: params.documentId,
+    requireAddress: params.requireAddress,
     sendNow: false,
   };
 
@@ -49,21 +51,21 @@ export async function createEsignFromQuote(params: {
     });
   }
 
-  const { envelope, signToken } = await createEsignEnvelope(input);
+  const { envelope, signSlug } = await createEsignEnvelope(input);
   let emailErrors: string[] = [];
 
   if (params.sendNow !== false) {
     const { sendEsignEnvelope } = await import("./repository");
-    const sent = await sendEsignEnvelope(envelope.id, signToken);
-    emailErrors = await deliverEsignSentNotifications(sent, signToken);
+    const sent = await sendEsignEnvelope(envelope.id, signSlug);
+    emailErrors = await deliverEsignSentNotifications(sent, signSlug);
     return {
       envelope: { ...sent, signUrl: envelope.signUrl },
-      signToken,
+      signSlug,
       emailErrors,
     };
   }
 
-  return { envelope, signToken, emailErrors };
+  return { envelope, signSlug, emailErrors };
 }
 
 export async function createEsignFromVaultFile(params: {
@@ -71,8 +73,9 @@ export async function createEsignFromVaultFile(params: {
   signerName: string;
   signerEmail: string;
   title?: string;
+  requireAddress?: boolean;
   sendNow?: boolean;
-}): Promise<{ envelope: EsignEnvelopeDetail; signToken: string; emailErrors: string[] }> {
+}): Promise<{ envelope: EsignEnvelopeDetail; signSlug: string; emailErrors: string[] }> {
   const snap = await snapshotFromVaultFileId(params.fileId);
   if (!snap) {
     throw new AiError({
@@ -89,18 +92,19 @@ export async function createEsignFromVaultFile(params: {
     documentSnapshot: snap,
     sourceType: "vault_file",
     sourceRef: params.fileId,
+    requireAddress: params.requireAddress,
     sendNow: false,
   };
 
-  const { envelope, signToken } = await createEsignEnvelope(input);
+  const { envelope, signSlug } = await createEsignEnvelope(input);
   let emailErrors: string[] = [];
 
   if (params.sendNow !== false) {
     const { sendEsignEnvelope } = await import("./repository");
-    const sent = await sendEsignEnvelope(envelope.id, signToken);
-    emailErrors = await deliverEsignSentNotifications(sent, signToken);
-    return { envelope: { ...sent, signUrl: envelope.signUrl }, signToken, emailErrors };
+    const sent = await sendEsignEnvelope(envelope.id, signSlug);
+    emailErrors = await deliverEsignSentNotifications(sent, signSlug);
+    return { envelope: { ...sent, signUrl: envelope.signUrl }, signSlug, emailErrors };
   }
 
-  return { envelope, signToken, emailErrors };
+  return { envelope, signSlug, emailErrors };
 }

@@ -12,14 +12,14 @@ export const dynamic = "force-dynamic";
 export default async function SignPortalPage({
   params,
 }: {
-  params: Promise<{ token: string }>;
+  params: Promise<{ slug: string }>;
 }) {
-  const { token } = await params;
+  const { slug } = await params;
   const business = getBusinessProfile();
 
   return (
     <div className="min-h-[100dvh] bg-brand-black text-foreground">
-      <SignPortalClient token={token} business={business} />
+      <SignPortalClient slug={slug} business={business} />
     </div>
   );
 }

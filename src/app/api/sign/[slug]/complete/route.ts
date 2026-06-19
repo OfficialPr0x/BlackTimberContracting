@@ -1,5 +1,5 @@
 import { errorResponse, AiError } from "@/lib/openrouter/errors";
-import { completeEsignSignature, getEsignByToken } from "@/lib/esign/repository";
+import { completeEsignSignature } from "@/lib/esign/repository";
 import { deliverEsignSignedNotifications } from "@/lib/esign/notify";
 import { z } from "zod";
 
@@ -9,21 +9,32 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   signatureDataUrl: z.string().min(100).max(500_000),
   consentAccepted: z.literal(true),
+  signatureFields: z.object({
+    legalName: z.string().min(1).max(120),
+    signatureText: z.string().min(1).max(120),
+    signatureFont: z.enum(["dancing", "greatvibes", "sacramento", "caveat"]),
+    title: z.string().max(120).optional(),
+    company: z.string().max(160).optional(),
+    address: z.string().max(400).optional(),
+    dateSigned: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+    consentText: z.string().min(1).max(1000),
+  }),
 });
 
 export async function POST(
   req: Request,
-  ctx: { params: Promise<{ token: string }> }
+  ctx: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { token } = await ctx.params;
+    const { slug } = await ctx.params;
     const json = await req.json().catch(() => null);
     const parsed = Body.safeParse(json);
     if (!parsed.success) {
       throw new AiError({
         code: "invalid_input",
         status: 400,
-        clientMessage: "Signature and agreement are required.",
+        clientMessage: "Please complete all required signing fields.",
+        message: parsed.error.message,
       });
     }
 
@@ -34,8 +45,9 @@ export async function POST(
     const userAgent = req.headers.get("user-agent") ?? undefined;
 
     const updated = await completeEsignSignature({
-      plainToken: token,
+      slug,
       signatureDataUrl: parsed.data.signatureDataUrl,
+      signatureFields: parsed.data.signatureFields,
       consentAccepted: true,
       ip,
       userAgent,

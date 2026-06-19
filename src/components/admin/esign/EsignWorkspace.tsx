@@ -47,6 +47,7 @@ export default function EsignWorkspace() {
   const [signerEmail, setSignerEmail] = useState("");
   const [signerName, setSignerName] = useState("");
   const [message, setMessage] = useState("");
+  const [requireAddress, setRequireAddress] = useState(false);
 
   const refreshList = useCallback(async () => {
     const res = await fetch("/api/admin/esign");
@@ -109,6 +110,7 @@ export default function EsignWorkspace() {
           signerName: signerName || undefined,
           signerEmail: signerEmail || undefined,
           signerMessage: message || undefined,
+          requireAddress,
           sendNow: true,
         }),
       });
@@ -241,6 +243,15 @@ export default function EsignWorkspace() {
               className="mt-1 w-full bg-brand-black border border-brand-border rounded-lg px-3 py-2 text-sm text-white"
             />
           </label>
+          <label className="flex items-center gap-2 sm:col-span-2 text-xs text-brand-gray cursor-pointer">
+            <input
+              type="checkbox"
+              checked={requireAddress}
+              onChange={(e) => setRequireAddress(e.target.checked)}
+              className="accent-brand-gold"
+            />
+            <span>Require signer to enter a mailing address</span>
+          </label>
         </div>
         <button
           type="button"
@@ -306,10 +317,56 @@ export default function EsignWorkspace() {
                 <p className="text-xs text-brand-gray mt-1">
                   {detail.signerName} · {detail.signerEmail}
                 </p>
-                {detail.sourceRef ? (
-                  <p className="text-[10px] font-mono text-brand-gold mt-1">{detail.sourceRef}</p>
-                ) : null}
+                <p className="text-[10px] font-mono text-brand-gold mt-1 flex flex-wrap gap-x-3">
+                  {detail.documentNumber ? <span>{detail.documentNumber}</span> : null}
+                  {detail.sourceRef ? <span className="text-brand-gray">{detail.sourceRef}</span> : null}
+                </p>
               </div>
+
+              {detail.signUrl ? (
+                <div className="flex flex-wrap items-center gap-2 text-[10px] bg-brand-panel border border-brand-border rounded-lg px-3 py-2">
+                  <span className="text-brand-gray font-mono uppercase">Sign link</span>
+                  <code className="text-brand-gold truncate max-w-[min(100%,280px)]">
+                    {detail.signUrl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => detail.signUrl && void navigator.clipboard.writeText(detail.signUrl)}
+                    className="p-1 text-brand-gold hover:bg-brand-gold/10 rounded"
+                    title="Copy link"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                  <a
+                    href={detail.signUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 text-brand-gold hover:bg-brand-gold/10 rounded"
+                    title="Open signing page"
+                  >
+                    <Eye className="w-3 h-3" />
+                  </a>
+                </div>
+              ) : null}
+
+              {detail.signatureFields ? (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 space-y-1">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-300">
+                    Signed by
+                  </p>
+                  <p className="text-xs text-white">
+                    {detail.signatureFields.legalName}
+                    {detail.signatureFields.title ? `, ${detail.signatureFields.title}` : ""}
+                    {detail.signatureFields.company ? ` · ${detail.signatureFields.company}` : ""}
+                  </p>
+                  {detail.signatureFields.address ? (
+                    <p className="text-[10px] text-brand-gray">{detail.signatureFields.address}</p>
+                  ) : null}
+                  <p className="text-[10px] text-brand-gray font-mono">
+                    Dated {detail.signatureFields.dateSigned}
+                  </p>
+                </div>
+              ) : null}
               <dl className="grid grid-cols-2 gap-2 text-[10px] font-mono">
                 <div>
                   <dt className="text-brand-gray uppercase">Sent</dt>

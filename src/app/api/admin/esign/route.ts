@@ -14,6 +14,7 @@ const CreateBody = z.discriminatedUnion("source", [
     signerName: z.string().min(1).max(120).optional(),
     signerEmail: z.string().email().max(200).optional(),
     signerMessage: z.string().max(2000).optional(),
+    requireAddress: z.boolean().optional(),
     sendNow: z.boolean().optional(),
   }),
   z.object({
@@ -22,6 +23,7 @@ const CreateBody = z.discriminatedUnion("source", [
     signerName: z.string().min(1).max(120),
     signerEmail: z.string().email().max(200),
     title: z.string().max(255).optional(),
+    requireAddress: z.boolean().optional(),
     sendNow: z.boolean().optional(),
   }),
 ]);

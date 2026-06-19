@@ -1,5 +1,5 @@
 import { errorResponse } from "@/lib/openrouter/errors";
-import { getEsignByToken, markEsignViewed } from "@/lib/esign/repository";
+import { getEsignBySlug, markEsignViewed } from "@/lib/esign/repository";
 import { deliverEsignViewedNotification } from "@/lib/esign/notify";
 
 export const runtime = "nodejs";
@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   req: Request,
-  ctx: { params: Promise<{ token: string }> }
+  ctx: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { token } = await ctx.params;
-    const found = await getEsignByToken(token);
+    const { slug } = await ctx.params;
+    const found = await getEsignBySlug(slug);
     if (!found) {
       return Response.json({ error: { message: "Link invalid or expired." } }, { status: 404 });
     }

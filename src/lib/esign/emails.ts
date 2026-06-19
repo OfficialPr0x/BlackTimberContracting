@@ -15,6 +15,20 @@ function ownerEmail(): string {
   );
 }
 
+/**
+ * From-address for all e-sign mail. Defaults to jaryd@blacktimber.ca so signing
+ * requests come from a recognizable, monitored mailbox on the verified domain.
+ */
+function esignFromEmail(): string {
+  return process.env.ESIGN_FROM_EMAIL?.trim() || "jaryd@blacktimber.ca";
+}
+
+function refLine(envelope: EsignEnvelopeRow): string {
+  return envelope.documentNumber
+    ? `<p style="font-size:11px;color:#888;margin:4px 0 0;">Reference: ${envelope.documentNumber}</p>`
+    : "";
+}
+
 function emailShell(title: string, body: string): string {
   const biz = getBusinessProfile();
   return `
@@ -34,11 +48,11 @@ function emailShell(title: string, body: string): string {
 
 export async function notifySignerToSign(
   envelope: EsignEnvelopeRow,
-  plainToken: string
+  slug: string
 ): Promise<void> {
   if (!isResendConfigured()) return;
 
-  const url = signPortalUrl(plainToken);
+  const url = signPortalUrl(slug);
   const biz = getBusinessProfile();
 
   const html = emailShell(
@@ -49,6 +63,7 @@ export async function notifySignerToSign(
       <strong style="color:#fff;">${biz.name}</strong> sent you a document to review and sign:
       <strong style="color:#c5a880;">${envelope.title}</strong>
     </p>
+    ${refLine(envelope)}
     ${envelope.signerMessage ? `<p style="color:#aaa;font-style:italic;">"${envelope.signerMessage}"</p>` : ""}
     <p style="margin:24px 0;">
       <a href="${url}" style="display:inline-block;background:#c5a880;color:#0a0a0a;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;">
@@ -60,10 +75,11 @@ export async function notifySignerToSign(
   );
 
   const { id } = await sendEmail({
+    from: esignFromEmail(),
     to: envelope.signerEmail,
     subject: `Please sign: ${envelope.title} — ${biz.name}`,
     html,
-    replyTo: biz.email,
+    replyTo: esignFromEmail(),
   });
 
   await insertEsignEmailEvent(envelope.id, "email_sent", {
@@ -75,13 +91,13 @@ export async function notifySignerToSign(
 
 export async function notifyOwnerSent(envelope: EsignEnvelopeRow): Promise<void> {
   if (!isResendConfigured()) return;
-  const biz = getBusinessProfile();
   const html = emailShell(
     "E-sign sent",
     `<p style="color:#ccc;">Sent <strong style="color:#fff;">${envelope.title}</strong> to ${envelope.signerName} &lt;${envelope.signerEmail}&gt;.</p>
      <p style="color:#888;font-size:12px;">Track status in Admin → E-Sign.</p>`
   );
   await sendEmail({
+    from: esignFromEmail(),
     to: ownerEmail(),
     subject: `[E-sign sent] ${envelope.title}`,
     html,
@@ -95,21 +111,56 @@ export async function notifyOwnerViewed(envelope: EsignEnvelopeRow): Promise<voi
     `<p style="color:#ccc;"><strong style="color:#fff;">${envelope.signerName}</strong> opened <strong>${envelope.title}</strong>.</p>`
   );
   await sendEmail({
+    from: esignFromEmail(),
     to: ownerEmail(),
     subject: `[Viewed] ${envelope.title} — ${envelope.signerName}`,
     html,
   });
 }
 
+/** Audit "Certificate of Completion" block reused in owner + signer emails. */
+function certificateBlock(envelope: EsignEnvelopeRow): string {
+  const f = envelope.signatureFields;
+  const signedAt = envelope.signedAt
+    ? new Date(envelope.signedAt).toLocaleString("en-CA", { timeZone: "America/Vancouver" })
+    : new Date().toLocaleString("en-CA", { timeZone: "America/Vancouver" });
+  const rows: Array<[string, string | undefined]> = [
+    ["Document", envelope.title],
+    ["Reference", envelope.documentNumber ?? undefined],
+    ["Legal name", f?.legalName],
+    ["Title", f?.title],
+    ["Company", f?.company],
+    ["Email", envelope.signerEmail],
+    ["Address", f?.address],
+    ["Date attested", f?.dateSigned],
+    ["Signed (server time)", signedAt],
+  ];
+  const body = rows
+    .filter(([, v]) => v && String(v).trim())
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:3px 12px 3px 0;color:#888;font-size:11px;white-space:nowrap;">${k}</td><td style="padding:3px 0;color:#e8e4dc;font-size:11px;">${v}</td></tr>`
+    )
+    .join("");
+  return `
+    <div style="margin:18px 0;padding:14px;border:1px solid #3d3830;border-radius:8px;background:#0f0e0c;">
+      <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#c5a880;">Certificate of completion</p>
+      <table style="border-collapse:collapse;">${body}</table>
+    </div>`;
+}
+
 export async function notifyOwnerSigned(envelope: EsignEnvelopeRow): Promise<void> {
   if (!isResendConfigured()) return;
   const biz = getBusinessProfile();
+  const certificate = certificateBlock(envelope);
   const html = emailShell(
     "Document signed",
     `<p style="color:#ccc;"><strong style="color:#fff;">${envelope.signerName}</strong> signed <strong>${envelope.title}</strong>.</p>
-     <p style="color:#888;font-size:12px;">Open Admin → E-Sign for the audit trail.</p>`
+     ${certificate}
+     <p style="color:#888;font-size:12px;">Open Admin → E-Sign for the full audit trail.</p>`
   );
   await sendEmail({
+    from: esignFromEmail(),
     to: ownerEmail(),
     subject: `[Signed] ${envelope.title} — ${envelope.signerName}`,
     html,
@@ -118,12 +169,15 @@ export async function notifyOwnerSigned(envelope: EsignEnvelopeRow): Promise<voi
   const signerHtml = emailShell(
     "Thank you — signed copy",
     `<p style="color:#ccc;">Hi ${envelope.signerName},</p>
-     <p style="color:#ccc;">Your signature on <strong>${envelope.title}</strong> was recorded on ${new Date().toLocaleString("en-CA", { timeZone: "America/Vancouver" })}.</p>
-     <p style="color:#888;font-size:12px;">Keep this email for your records. Questions? Reply or call ${biz.phone}.</p>`
+     <p style="color:#ccc;">Your electronic signature on <strong>${envelope.title}</strong> has been recorded. Keep this certificate for your records.</p>
+     ${certificate}
+     <p style="color:#888;font-size:12px;">Questions? Reply to this email or call ${biz.phone}.</p>`
   );
   await sendEmail({
+    from: esignFromEmail(),
     to: envelope.signerEmail,
     subject: `Signed: ${envelope.title} — ${biz.name}`,
     html: signerHtml,
+    replyTo: esignFromEmail(),
   });
 }

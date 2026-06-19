@@ -3,6 +3,7 @@ import "server-only";
 import { AiError } from "@/lib/openrouter/errors";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/server";
 import { generateSignToken, hashSignToken } from "./tokens";
+import { generateDocumentNumber, generateSignSlug } from "./slugs";
 import type {
   CreateEsignInput,
   EsignDocumentSnapshot,
@@ -10,9 +11,13 @@ import type {
   EsignEnvelopeRow,
   EsignEventRow,
   EsignEventType,
+  EsignSignatureFields,
   EsignStatus,
 } from "./types";
 import { signPortalUrl } from "./site-url";
+
+const ENVELOPE_COLUMNS =
+  "id, title, status, source_type, source_ref, slug, document_number, require_address, signature_fields, signer_name, signer_email, signer_message, document_snapshot, expires_at, sent_at, viewed_at, signed_at, voided_at, signature_data_url, created_at, updated_at";
 
 function requireSb() {
   if (!isSupabaseConfigured()) {
@@ -43,10 +48,14 @@ function mapEnvelope(row: Record<string, unknown>): EsignEnvelopeRow {
     status: row.status as EsignStatus,
     sourceType: (row.source_type as string) ?? null,
     sourceRef: (row.source_ref as string) ?? null,
+    slug: (row.slug as string) ?? null,
+    documentNumber: (row.document_number as string) ?? null,
     signerName: row.signer_name as string,
     signerEmail: row.signer_email as string,
     signerMessage: (row.signer_message as string) ?? null,
     documentSnapshot: row.document_snapshot as EsignDocumentSnapshot,
+    requireAddress: !!row.require_address,
+    signatureFields: (row.signature_fields as EsignSignatureFields) ?? null,
     expiresAt: row.expires_at ? String(row.expires_at) : null,
     sentAt: row.sent_at ? String(row.sent_at) : null,
     viewedAt: row.viewed_at ? String(row.viewed_at) : null,
@@ -97,9 +106,7 @@ export async function listEsignEnvelopes(limit = 60): Promise<EsignEnvelopeRow[]
   const sb = requireSb();
   const { data, error } = await sb
     .from("esign_envelopes")
-    .select(
-      "id, title, status, source_type, source_ref, signer_name, signer_email, signer_message, document_snapshot, expires_at, sent_at, viewed_at, signed_at, voided_at, signature_data_url, created_at, updated_at"
-    )
+    .select(ENVELOPE_COLUMNS)
     .order("updated_at", { ascending: false })
     .limit(limit);
 
@@ -114,9 +121,7 @@ export async function getEsignEnvelope(id: string): Promise<EsignEnvelopeDetail 
   const sb = requireSb();
   const { data, error } = await sb
     .from("esign_envelopes")
-    .select(
-      "id, title, status, source_type, source_ref, signer_name, signer_email, signer_message, document_snapshot, expires_at, sent_at, viewed_at, signed_at, voided_at, signature_data_url, created_at, updated_at"
-    )
+    .select(ENVELOPE_COLUMNS)
     .eq("id", id)
     .maybeSingle();
 
@@ -128,18 +133,25 @@ export async function getEsignEnvelope(id: string): Promise<EsignEnvelopeDetail 
     .eq("envelope_id", id)
     .order("created_at", { ascending: true });
 
+  const row = mapEnvelope(data as Record<string, unknown>);
   return {
-    ...mapEnvelope(data as Record<string, unknown>),
+    ...row,
     events: (events ?? []).map((e) => mapEvent(e as Record<string, unknown>)),
+    // Admin-only loader: surface the link so the panel can always copy/open it.
+    signUrl: row.slug ? signPortalUrl(row.slug) : undefined,
   };
 }
 
 export async function createEsignEnvelope(
   input: CreateEsignInput
-): Promise<{ envelope: EsignEnvelopeDetail; signToken: string }> {
+): Promise<{ envelope: EsignEnvelopeDetail; signSlug: string }> {
   const sb = requireSb();
+  // Token hash retained to satisfy the NOT NULL column + as defense-in-depth;
+  // the public link is the branded high-entropy slug.
   const signToken = generateSignToken();
   const tokenHash = hashSignToken(signToken);
+  const signSlug = generateSignSlug();
+  const documentNumber = generateDocumentNumber();
   const expiresAt =
     input.expiresInDays && input.expiresInDays > 0
       ? new Date(Date.now() + input.expiresInDays * 86400_000).toISOString()
@@ -152,6 +164,9 @@ export async function createEsignEnvelope(
       status: "draft",
       source_type: input.sourceType ?? null,
       source_ref: input.sourceRef ?? null,
+      slug: signSlug,
+      document_number: documentNumber,
+      require_address: input.requireAddress ?? false,
       signer_name: input.signerName.trim(),
       signer_email: input.signerEmail.trim().toLowerCase(),
       signer_message: input.signerMessage?.trim() ?? null,
@@ -172,7 +187,10 @@ export async function createEsignEnvelope(
   }
 
   const id = data.id as string;
-  await insertEvent(id, "created", "admin", { sourceRef: input.sourceRef });
+  await insertEvent(id, "created", "admin", {
+    sourceRef: input.sourceRef,
+    documentNumber,
+  });
 
   const detail = await getEsignEnvelope(id);
   if (!detail) {
@@ -184,31 +202,28 @@ export async function createEsignEnvelope(
   }
 
   if (input.sendNow) {
-    await sendEsignEnvelope(id, signToken);
+    await sendEsignEnvelope(id, signSlug);
     const refreshed = await getEsignEnvelope(id);
     return {
-      envelope: { ...(refreshed ?? detail), signUrl: signPortalUrl(signToken) },
-      signToken,
+      envelope: { ...(refreshed ?? detail), signUrl: signPortalUrl(signSlug) },
+      signSlug,
     };
   }
 
   return {
-    envelope: { ...detail, signUrl: signPortalUrl(signToken) },
-    signToken,
+    envelope: { ...detail, signUrl: signPortalUrl(signSlug) },
+    signSlug,
   };
 }
 
-export async function getEsignByToken(
-  plainToken: string
-): Promise<(EsignEnvelopeDetail & { plainToken: string }) | null> {
+export async function getEsignBySlug(
+  slug: string
+): Promise<(EsignEnvelopeDetail & { slug: string }) | null> {
   const sb = requireSb();
-  const hash = hashSignToken(plainToken);
   const { data, error } = await sb
     .from("esign_envelopes")
-    .select(
-      "id, title, status, source_type, source_ref, signer_name, signer_email, signer_message, document_snapshot, expires_at, sent_at, viewed_at, signed_at, voided_at, signature_data_url, created_at, updated_at"
-    )
-    .eq("sign_token_hash", hash)
+    .select(ENVELOPE_COLUMNS)
+    .eq("slug", slug)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -229,7 +244,7 @@ export async function getEsignByToken(
   return {
     ...row,
     events: (events ?? []).map((e) => mapEvent(e as Record<string, unknown>)),
-    plainToken,
+    slug,
   };
 }
 
@@ -270,8 +285,9 @@ export async function markEsignViewed(
 }
 
 export async function completeEsignSignature(params: {
-  plainToken: string;
+  slug: string;
   signatureDataUrl: string;
+  signatureFields: EsignSignatureFields;
   consentAccepted: boolean;
   ip?: string;
   userAgent?: string;
@@ -297,14 +313,41 @@ export async function completeEsignSignature(params: {
       clientMessage: "Signature image too large.",
     });
   }
+  if (!params.signatureFields.legalName?.trim()) {
+    throw new AiError({
+      code: "invalid_input",
+      status: 400,
+      clientMessage: "Your full legal name is required.",
+    });
+  }
 
-  const found = await getEsignByToken(params.plainToken);
+  const found = await getEsignBySlug(params.slug);
   if (!found) return null;
   if (found.status === "signed") return found;
   if (found.status === "void" || found.status === "expired") return null;
+  if (found.requireAddress && !params.signatureFields.address?.trim()) {
+    throw new AiError({
+      code: "invalid_input",
+      status: 400,
+      clientMessage: "A mailing address is required to sign this document.",
+    });
+  }
 
   const sb = requireSb();
   const now = new Date().toISOString();
+
+  const cleanFields: EsignSignatureFields = {
+    legalName: params.signatureFields.legalName.trim().slice(0, 120),
+    signatureText: (params.signatureFields.signatureText || params.signatureFields.legalName)
+      .trim()
+      .slice(0, 120),
+    signatureFont: params.signatureFields.signatureFont,
+    title: params.signatureFields.title?.trim().slice(0, 120) || undefined,
+    company: params.signatureFields.company?.trim().slice(0, 160) || undefined,
+    address: params.signatureFields.address?.trim().slice(0, 400) || undefined,
+    dateSigned: params.signatureFields.dateSigned,
+    consentText: params.signatureFields.consentText.slice(0, 1000),
+  };
 
   const { error } = await sb
     .from("esign_envelopes")
@@ -312,6 +355,7 @@ export async function completeEsignSignature(params: {
       status: "signed",
       signed_at: now,
       signature_data_url: params.signatureDataUrl,
+      signature_fields: cleanFields,
       signer_ip: params.ip ?? null,
       signer_user_agent: params.userAgent?.slice(0, 500) ?? null,
       consent_accepted_at: now,
@@ -329,6 +373,8 @@ export async function completeEsignSignature(params: {
 
   await insertEvent(found.id, "signed", "signer", {
     ip: params.ip,
+    legalName: cleanFields.legalName,
+    dateSigned: cleanFields.dateSigned,
   });
 
   return getEsignEnvelope(found.id);
@@ -336,7 +382,7 @@ export async function completeEsignSignature(params: {
 
 export async function sendEsignEnvelope(
   envelopeId: string,
-  knownPlainToken?: string
+  knownSlug?: string
 ): Promise<EsignEnvelopeDetail> {
   const detail = await getEsignEnvelope(envelopeId);
   if (!detail) {
@@ -377,8 +423,9 @@ export async function sendEsignEnvelope(
     });
   }
 
-  if (knownPlainToken) {
-    refreshed.signUrl = signPortalUrl(knownPlainToken);
+  const linkSlug = knownSlug ?? refreshed.slug ?? undefined;
+  if (linkSlug) {
+    refreshed.signUrl = signPortalUrl(linkSlug);
   }
 
   return refreshed;
@@ -395,13 +442,17 @@ export async function voidEsignEnvelope(envelopeId: string): Promise<EsignEnvelo
   return getEsignEnvelope(envelopeId);
 }
 
-/** Regenerate token only for draft envelopes (returns new plain token once). */
-export async function rotateSignToken(envelopeId: string): Promise<string> {
-  const signToken = generateSignToken();
+/** Rotate the signing link (new slug) for unsigned envelopes. Returns new slug. */
+export async function rotateSignSlug(envelopeId: string): Promise<string> {
+  const signSlug = generateSignSlug();
   const sb = requireSb();
   const { error } = await sb
     .from("esign_envelopes")
-    .update({ sign_token_hash: hashSignToken(signToken) })
+    .update({
+      slug: signSlug,
+      // Rotate the legacy hash too so any old link is fully invalidated.
+      sign_token_hash: hashSignToken(generateSignToken()),
+    })
     .eq("id", envelopeId)
     .in("status", ["draft", "sent", "viewed"]);
 
@@ -413,5 +464,5 @@ export async function rotateSignToken(envelopeId: string): Promise<string> {
       message: error.message,
     });
   }
-  return signToken;
+  return signSlug;
 }

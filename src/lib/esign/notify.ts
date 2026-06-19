@@ -11,11 +11,11 @@ import type { EsignEnvelopeRow } from "./types";
 
 export async function deliverEsignSentNotifications(
   envelope: EsignEnvelopeRow,
-  plainToken: string
+  slug: string
 ): Promise<string[]> {
   const errors: string[] = [];
   try {
-    await notifySignerToSign(envelope, plainToken);
+    await notifySignerToSign(envelope, slug);
   } catch (e) {
     errors.push(`signer: ${(e as Error).message}`);
     await insertEsignEmailEvent(envelope.id, "email_failed", {

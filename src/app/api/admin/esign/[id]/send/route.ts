@@ -1,10 +1,6 @@
 import { errorResponse } from "@/lib/openrouter/errors";
 import { requireAdminRoute } from "@/lib/admin/session";
-import {
-  getEsignEnvelope,
-  rotateSignToken,
-  sendEsignEnvelope,
-} from "@/lib/esign/repository";
+import { rotateSignSlug, sendEsignEnvelope } from "@/lib/esign/repository";
 import { deliverEsignSentNotifications } from "@/lib/esign/notify";
 import { signPortalUrl } from "@/lib/esign/site-url";
 
@@ -20,13 +16,13 @@ export async function POST(
     if (!auth.ok) return auth.response;
 
     const { id } = await ctx.params;
-    const token = await rotateSignToken(id);
-    const sent = await sendEsignEnvelope(id, token);
-    const emailErrors = await deliverEsignSentNotifications(sent, token);
+    const slug = await rotateSignSlug(id);
+    const sent = await sendEsignEnvelope(id, slug);
+    const emailErrors = await deliverEsignSentNotifications(sent, slug);
 
     return Response.json({
       envelope: sent,
-      signUrl: signPortalUrl(token),
+      signUrl: signPortalUrl(slug),
       emailErrors,
     });
   } catch (err) {

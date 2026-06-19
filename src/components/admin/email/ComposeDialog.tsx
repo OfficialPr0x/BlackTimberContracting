@@ -1,9 +1,46 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, Send, X, Loader2 } from "lucide-react";
-import { sendMessage, type SendInput } from "./api";
+import {
+  Paperclip,
+  Send,
+  X,
+  Loader2,
+  Sparkles,
+  Wand2,
+  Scissors,
+  StretchHorizontal,
+  Briefcase,
+  Smile,
+  SpellCheck,
+} from "lucide-react";
+import {
+  sendMessage,
+  generateEmailDraft,
+  type SendInput,
+  type AiDraftTone,
+  type AiDraftRefine,
+} from "./api";
 import type { Mailbox } from "@/lib/email/types";
+
+const TONES: { value: AiDraftTone; label: string }[] = [
+  { value: "professional", label: "Professional" },
+  { value: "friendly", label: "Friendly" },
+  { value: "warm", label: "Warm" },
+  { value: "concise", label: "Concise" },
+  { value: "formal", label: "Formal" },
+  { value: "apologetic", label: "Apologetic" },
+  { value: "persuasive", label: "Persuasive" },
+];
+
+const REFINEMENTS: { value: AiDraftRefine; label: string; icon: typeof Wand2 }[] = [
+  { value: "improve", label: "Improve", icon: Wand2 },
+  { value: "shorten", label: "Shorten", icon: Scissors },
+  { value: "expand", label: "Expand", icon: StretchHorizontal },
+  { value: "more_formal", label: "Formal", icon: Briefcase },
+  { value: "more_casual", label: "Casual", icon: Smile },
+  { value: "fix_grammar", label: "Fix grammar", icon: SpellCheck },
+];
 
 export interface ComposePrefill {
   to?: string[];
@@ -47,6 +84,68 @@ export default function ComposeDialog({ mailbox, prefill, onClose, onSent }: Com
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const aiMode: "compose" | "reply" | "forward" = prefill?.inReplyToMessageId
+    ? "reply"
+    : prefill?.forwardMessageId
+      ? "forward"
+      : "compose";
+  const threadMessageId = prefill?.inReplyToMessageId ?? prefill?.forwardMessageId;
+
+  const [showAi, setShowAi] = useState(true);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiTone, setAiTone] = useState<AiDraftTone>("professional");
+  const [aiBusy, setAiBusy] = useState<null | "draft" | AiDraftRefine>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  async function runAiDraft() {
+    setAiBusy("draft");
+    setAiError(null);
+    try {
+      const res = await generateEmailDraft({
+        mailboxId: mailbox.id,
+        mode: aiMode,
+        threadMessageId,
+        instruction: aiInstruction.trim() || undefined,
+        tone: aiTone,
+        currentDraft: body.trim() || undefined,
+        to: splitAddresses(to),
+        subject: subject.trim() || undefined,
+      });
+      setBody(res.bodyText);
+      if (!subject.trim() && res.subject) setSubject(res.subject);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI draft failed.");
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function runAiRefine(refine: AiDraftRefine) {
+    if (!body.trim()) {
+      setAiError("Write or generate a draft first, then refine it.");
+      return;
+    }
+    setAiBusy(refine);
+    setAiError(null);
+    try {
+      const res = await generateEmailDraft({
+        mailboxId: mailbox.id,
+        mode: aiMode,
+        threadMessageId,
+        tone: aiTone,
+        currentDraft: body,
+        refine,
+        to: splitAddresses(to),
+        subject: subject.trim() || undefined,
+      });
+      setBody(res.bodyText);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI refine failed.");
+    } finally {
+      setAiBusy(null);
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,9 +222,22 @@ export default function ComposeDialog({ mailbox, prefill, onClose, onSent }: Com
                 ? "Forward"
                 : "New message"}
           </h2>
-          <button onClick={onClose} className="p-1.5 text-brand-gray hover:text-white" aria-label="Close">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowAi((v) => !v)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                showAi
+                  ? "bg-brand-gold/15 text-brand-gold"
+                  : "text-brand-gray hover:text-brand-gold hover:bg-brand-panel"
+              }`}
+              aria-pressed={showAi}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> AI
+            </button>
+            <button onClick={onClose} className="p-1.5 text-brand-gray hover:text-white" aria-label="Close">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
@@ -169,6 +281,91 @@ export default function ComposeDialog({ mailbox, prefill, onClose, onSent }: Com
               className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-brand-gray/60"
             />
           </Field>
+
+          {showAi && (
+            <div className="rounded-xl border border-brand-gold/25 bg-brand-gold/[0.04] p-3 space-y-2.5">
+              <div className="flex items-center gap-2 text-[11px] font-medium text-brand-gold">
+                <Sparkles className="w-3.5 h-3.5" />
+                {aiMode === "reply"
+                  ? "AI reply — knows the whole thread"
+                  : aiMode === "forward"
+                    ? "AI forward note"
+                    : "AI compose"}
+              </div>
+
+              <div className="flex items-start gap-2">
+                <textarea
+                  value={aiInstruction}
+                  onChange={(e) => setAiInstruction(e.target.value)}
+                  rows={2}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      if (!aiBusy) void runAiDraft();
+                    }
+                  }}
+                  placeholder={
+                    aiMode === "reply"
+                      ? "Optional: what should the reply say? (leave blank to let AI decide)"
+                      : "Tell the AI what to write… e.g. 'Confirm the deck quote and propose starting next Monday.'"
+                  }
+                  className="flex-1 bg-brand-panel/50 border border-brand-border rounded-lg p-2.5 text-sm text-white placeholder:text-brand-gray/60 outline-none focus:border-brand-gold/40 resize-y"
+                />
+                <button
+                  onClick={runAiDraft}
+                  disabled={!!aiBusy}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-gold text-brand-black text-xs font-semibold hover:bg-brand-gold-hover disabled:opacity-60 shrink-0 self-stretch"
+                >
+                  {aiBusy === "draft" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  {body.trim() ? "Redraft" : "Draft"}
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-brand-gray mr-0.5">Tone</span>
+                {TONES.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => setAiTone(t.value)}
+                    className={`px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+                      aiTone === t.value
+                        ? "bg-brand-gold/20 text-brand-gold border border-brand-gold/40"
+                        : "text-brand-gray border border-brand-border hover:text-white"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {body.trim() && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-brand-gray mr-0.5">Refine</span>
+                  {REFINEMENTS.map(({ value, label, icon: Icon }) => (
+                    <button
+                      key={value}
+                      onClick={() => runAiRefine(value)}
+                      disabled={!!aiBusy}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] text-brand-gray border border-brand-border hover:text-white hover:border-brand-gold/40 disabled:opacity-50"
+                    >
+                      {aiBusy === value ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Icon className="w-3 h-3" />
+                      )}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+            </div>
+          )}
 
           <textarea
             value={body}

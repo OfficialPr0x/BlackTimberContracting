@@ -114,6 +114,47 @@ export async function patchMessage(
   );
 }
 
+export type AiDraftTone =
+  | "professional"
+  | "friendly"
+  | "warm"
+  | "concise"
+  | "formal"
+  | "apologetic"
+  | "persuasive";
+
+export type AiDraftRefine =
+  | "improve"
+  | "shorten"
+  | "expand"
+  | "more_formal"
+  | "more_casual"
+  | "fix_grammar";
+
+export interface AiDraftInput {
+  mailboxId: string;
+  mode: "compose" | "reply" | "forward";
+  threadMessageId?: string;
+  instruction?: string;
+  tone?: AiDraftTone;
+  currentDraft?: string;
+  refine?: AiDraftRefine;
+  to?: string[];
+  subject?: string;
+}
+
+export async function generateEmailDraft(
+  input: AiDraftInput
+): Promise<{ subject: string; bodyText: string }> {
+  return jsonOrThrow(
+    await fetch("/api/admin/email/ai-draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
 export interface SendInput {
   mailboxId: string;
   to: string[];

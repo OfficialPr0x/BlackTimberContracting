@@ -26,6 +26,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import Markdown from "@/components/Markdown";
+import CameraCapture from "@/components/admin/CameraCapture";
 
 // --- Lightweight client mirrors of the server estimator shapes -------------
 
@@ -122,6 +123,7 @@ export default function EstimatorChat() {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -168,6 +170,37 @@ export default function EstimatorChat() {
     },
     [attachments.length]
   );
+
+  // Captured frames from the live camera are already downscaled JPEG data URLs.
+  const addDataUrls = useCallback(
+    (urls: string[]) => {
+      if (urls.length === 0) return;
+      setError(null);
+      setAttachments((prev) => {
+        const room = MAX_IMAGES - prev.length;
+        const next = urls.slice(0, Math.max(0, room)).map((dataUrl, i) => ({
+          id: crypto.randomUUID(),
+          dataUrl,
+          name: `photo-${prev.length + i + 1}.jpg`,
+        }));
+        return [...prev, ...next];
+      });
+    },
+    []
+  );
+
+  const openCamera = useCallback(() => {
+    if (attachments.length >= MAX_IMAGES) {
+      setError(`Up to ${MAX_IMAGES} photos per message.`);
+      return;
+    }
+    // Prefer the in-app live camera; fall back to the OS picker if unsupported.
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      setShowCamera(true);
+    } else {
+      cameraRef.current?.click();
+    }
+  }, [attachments.length]);
 
   const removeAttachment = (id: string) =>
     setAttachments((prev) => prev.filter((a) => a.id !== id));
@@ -274,13 +307,14 @@ export default function EstimatorChat() {
   };
 
   return (
-    <div className="flex flex-col min-h-[calc(100dvh-8rem)] lg:min-h-[calc(100dvh-4rem)] -mx-4 lg:-mx-0">
-      <div className="px-4 lg:px-0 mb-4">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="mx-auto w-full max-w-3xl flex flex-col h-full min-h-0 px-3 sm:px-4 lg:px-6">
+      <div className="pt-3 sm:pt-4 pb-3 shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-brand-gold" />
           <h1 className="text-lg font-medium text-white tracking-tight">Onsite Estimator</h1>
         </div>
-        <p className="text-xs text-brand-gray mt-1 max-w-2xl">
+        <p className="text-xs text-brand-gray mt-1 max-w-2xl hidden sm:block">
           Your AI pro quoter. Snap job-site photos, talk through the scope, and I&apos;ll build a
           transparent estimate — then create the real estimate, quote, or invoice on command.
         </p>
@@ -288,7 +322,7 @@ export default function EstimatorChat() {
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto rounded-2xl border border-brand-border bg-brand-charcoal/40 px-4 py-4 space-y-4 min-h-[240px] max-h-[min(54dvh,560px)] lg:max-h-[calc(100dvh-19rem)]"
+        className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-brand-border bg-brand-charcoal/40 px-3 sm:px-4 py-4 space-y-4"
       >
         {messages.length === 0 ? (
           <div className="space-y-2 text-sm text-brand-gray">
@@ -417,7 +451,7 @@ export default function EstimatorChat() {
         </div>
       ) : null}
 
-      <div className="mt-3 sticky bottom-20 lg:bottom-0 bg-brand-black/80 backdrop-blur-sm pt-2 pb-1 lg:pb-0">
+      <div className="mt-3 shrink-0 pb-3">
         <div className="flex gap-2 items-end">
           <input
             ref={cameraRef}
@@ -442,18 +476,16 @@ export default function EstimatorChat() {
             }}
           />
 
-          <div className="flex flex-col gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => cameraRef.current?.click()}
-              disabled={pending || attachments.length >= MAX_IMAGES}
-              className="p-3 rounded-xl border border-brand-border text-brand-gold hover:border-brand-gold disabled:opacity-40"
-              aria-label="Take photo"
-              title="Take photo"
-            >
-              <Camera className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={openCamera}
+            disabled={pending || attachments.length >= MAX_IMAGES}
+            className="shrink-0 p-3 rounded-xl border border-brand-border text-brand-gold hover:border-brand-gold disabled:opacity-40"
+            aria-label="Open camera"
+            title="Open camera"
+          >
+            <Camera className="w-5 h-5" />
+          </button>
 
           <button
             type="button"
@@ -505,10 +537,20 @@ export default function EstimatorChat() {
             {pending ? <Loader className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>
-        <p className="text-[10px] font-mono text-brand-gray mt-2 px-1">
-          Camera · photos · voice (Whisper) · creates real Q/E/I docs · Enter to send
+        <p className="text-[10px] font-mono text-brand-gray mt-2 px-1 hidden sm:block">
+          Live camera · photos · voice (Whisper) · creates real Q/E/I docs · Enter to send
         </p>
       </div>
+      </div>
+
+      {showCamera ? (
+        <CameraCapture
+          remaining={MAX_IMAGES - attachments.length}
+          onCapture={addDataUrls}
+          onClose={() => setShowCamera(false)}
+          onUseSystemCamera={() => cameraRef.current?.click()}
+        />
+      ) : null}
     </div>
   );
 }

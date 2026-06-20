@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight, MoveHorizontal, MapPin } from "lucide-react";
 
 interface Transformation {
@@ -56,25 +56,32 @@ function SingleSlider({ t }: { t: Transformation }) {
     setPosition(Math.max(0, Math.min(100, pct)));
   }, []);
 
-  useEffect(() => {
-    const onUp = () => (dragging.current = false);
-    const onMove = (e: MouseEvent) => {
+  // Pointer Events + pointer capture keep the drag glued to this slider even
+  // when the finger leaves the element, and `touch-action: pan-y` (below) tells
+  // the browser that horizontal gestures belong to the slider — not the parent
+  // carousel — so dragging reveals the build instead of scrolling the rail.
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      dragging.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      move(e.clientX);
+    },
+    [move]
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
       if (dragging.current) move(e.clientX);
-    };
-    const onTouch = (e: TouchEvent) => {
-      if (dragging.current && e.touches.length > 0) move(e.touches[0].clientX);
-    };
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchend", onUp);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("touchmove", onTouch);
-    return () => {
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("touchend", onUp);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("touchmove", onTouch);
-    };
-  }, [move]);
+    },
+    [move]
+  );
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    dragging.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }, []);
 
   return (
     <div className="snap-center shrink-0 w-[88vw] sm:w-[640px] lg:w-[760px] relative group">
@@ -82,15 +89,11 @@ function SingleSlider({ t }: { t: Transformation }) {
         {/* Image stage */}
         <div
           ref={containerRef}
-          className="relative aspect-[16/10] cursor-ew-resize select-none"
-          onMouseDown={(e) => {
-            dragging.current = true;
-            move(e.clientX);
-          }}
-          onTouchStart={(e) => {
-            dragging.current = true;
-            if (e.touches.length > 0) move(e.touches[0].clientX);
-          }}
+          className="relative aspect-[16/10] cursor-ew-resize select-none touch-pan-y"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
         >
           {/* BEFORE (bottom) */}
           <img

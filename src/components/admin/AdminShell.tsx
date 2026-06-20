@@ -22,7 +22,9 @@ interface AdminShellProps {
 export default function AdminShell({ children, banner }: AdminShellProps) {
   const pathname = usePathname() ?? "/admin";
   const isFullBleed =
-    pathname.startsWith("/admin/bookkeeper") || pathname.startsWith("/admin/inbox");
+    pathname.startsWith("/admin/bookkeeper") ||
+    pathname.startsWith("/admin/inbox") ||
+    pathname.startsWith("/admin/concierge");
 
   return (
     <div className="min-h-[100dvh] bg-brand-black text-foreground flex flex-col lg:flex-row print:min-h-0">

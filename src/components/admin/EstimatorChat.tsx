@@ -195,7 +195,10 @@ export default function EstimatorChat() {
       return;
     }
     // Prefer the in-app live camera; fall back to the OS picker if unsupported.
-    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.mediaDevices?.getUserMedia === "function"
+    ) {
       setShowCamera(true);
     } else {
       cameraRef.current?.click();

@@ -53,7 +53,7 @@ export default function CameraCapture({
     setError(null);
 
     async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) {
+      if (typeof navigator.mediaDevices?.getUserMedia !== "function") {
         setError("This browser can't open the live camera.");
         return;
       }

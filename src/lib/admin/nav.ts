@@ -7,6 +7,7 @@ import {
   PenLine,
   Target,
   Mail,
+  QrCode,
 } from "lucide-react";
 
 export interface AdminNavItem {
@@ -66,6 +67,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     shortLabel: "Quote",
     description: "Photos + voice → live estimates, quotes & invoices",
     icon: MessageCircle,
+  },
+  {
+    href: "/admin/qr",
+    label: "QR Codes",
+    shortLabel: "QR",
+    description: "Branded QR codes for any page · logo + PNG download",
+    icon: QrCode,
   },
 ];
 

@@ -41,6 +41,7 @@ import ExitIntentPopup from "@/components/ExitIntentPopup";
 import MouseSpotlight from "@/components/MouseSpotlight";
 import ReviewsTicker from "@/components/ReviewsTicker";
 import BeforeAfterWall from "@/components/BeforeAfterWall";
+import WorkShowcase from "@/components/WorkShowcase";
 import MeetJaryd from "@/components/MeetJaryd";
 import WhyProjectsGoWrong from "@/components/WhyProjectsGoWrong";
 import AnimatedCounter from "@/components/AnimatedCounter";
@@ -263,6 +264,9 @@ export default function Home() {
       <section className="py-6 bg-brand-black border-y border-brand-border/40 relative z-10">
         <ReviewsTicker />
       </section>
+
+      {/* ─────────────── WORK SHOWCASE (real project deep-dives) ─────────────── */}
+      <WorkShowcase onTriggerQuote={() => triggerQuote(1)} />
 
       {/* ─────────────── BEFORE / AFTER WALL ─────────────── */}
       <section className="py-20 sm:py-28 bg-brand-charcoal border-b border-brand-border relative">

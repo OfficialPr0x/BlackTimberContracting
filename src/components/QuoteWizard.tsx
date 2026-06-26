@@ -45,6 +45,8 @@ interface AiQuoteResult {
   regionalNotes: string;
   headline: string;
   disclaimer: string;
+  /** True when the server returned its rate-card fallback (AI model unavailable). */
+  usedFallback?: boolean;
 }
 
 const usd = (n: number) =>
@@ -93,6 +95,26 @@ const PROJECT_CHIPS: { id: string; label: string; Icon: LucideIcon }[] = [
   { id: "flooring",   label: "Flooring",        Icon: Rows2        },
   { id: "other",      label: "Something Else",  Icon: HelpCircle   },
 ];
+
+// The AI quote API + pricing engine only accept this fixed set of types. Map
+// every friendly wizard chip onto a valid one so the request never 400s. The
+// human-readable label is always passed through in the notes so the AI still
+// knows it's a bathroom / flooring / tiling job and prices accordingly.
+const API_PROJECT_TYPE: Record<string, string> = {
+  deck: "deck",
+  fence: "fence",
+  pergola: "pergola",
+  garage: "garage",
+  addition: "addition",
+  bathroom: "other",
+  tiling: "other",
+  interlock: "other",
+  flooring: "other",
+  other: "other",
+};
+
+const projectLabel = (id: string) =>
+  PROJECT_CHIPS.find((c) => c.id === id)?.label ?? "Custom project";
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -204,11 +226,13 @@ export default function QuoteWizard({
 
     const photoNotes = photos.map((p, i) => p.note ? `Photo ${i + 1}: "${p.note}"` : "").filter(Boolean).join(" · ");
     const fullNotes = [
-      description,
+      `Project category: ${projectLabel(projectType)}`,
+      description ? `Customer description: ${description}` : "",
       photoNotes ? `Photo notes — ${photoNotes}` : "",
       budgetRange ? `Customer budget range: ${budgetRange}` : "",
       timeline ? `Timeline: ${timeline}` : "",
       fundingChoice ? `Funding: ${fundingChoice}` : "",
+      "IMPORTANT: Dimensions were not provided by the customer. Estimate the size from the photos and description. Do NOT assume a default size.",
     ].filter(Boolean).join("\n");
 
     const logQueue = [
@@ -231,7 +255,7 @@ export default function QuoteWizard({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectType: projectType || "other",
+            projectType: API_PROJECT_TYPE[projectType] ?? "other",
             dimensions: { length: 20, width: 20 },
             material: "other",
             upgrades: [],
@@ -245,12 +269,22 @@ export default function QuoteWizard({
           throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
         }
         const data = (await res.json()) as AiQuoteResult;
-        setAiResult(data);
-        setAiLogs(prev => [...prev, "Estimate ready."]);
+        // Only present a dollar figure when it's a genuine AI vision estimate.
+        // The server's rate-card fallback uses placeholder dimensions and would
+        // produce a misleading number for size-driven jobs (flooring, tiling),
+        // so in that case we route the customer to a hand-prepared quote instead.
+        if (data.usedFallback) {
+          setAiResult(null);
+          setAiLogs(prev => [...prev, "Prepared — Jaryd will confirm your exact number."]);
+        } else {
+          setAiResult(data);
+          setAiLogs(prev => [...prev, "Estimate ready."]);
+        }
         setTimeout(() => setStep(4), 600);
       } catch (err) {
         setAiError(err instanceof Error ? err.message : "AI request failed");
-        setAiLogs(prev => [...prev, "Running fallback estimate…"]);
+        setAiResult(null);
+        setAiLogs(prev => [...prev, "We'll hand-prepare your quote."]);
         setTimeout(() => setStep(4), 600);
       } finally {
         setAiPending(false);
@@ -266,7 +300,10 @@ export default function QuoteWizard({
 
   const estimateDocument = useMemo(() =>
     buildEstimateDocument(
-      { projectType: (projectType as Parameters<typeof estimateProject>[0]["projectType"]) || "other", length: 20, width: 20, material: "other", style: "", upgrades: [], corners: 0, gates: 0 },
+      {
+        projectType: (API_PROJECT_TYPE[projectType] ?? "other") as Parameters<typeof estimateProject>[0]["projectType"],
+        length: 20, width: 20, material: "other", style: "", upgrades: [], corners: 0, gates: 0,
+      },
       aiResult ? { headline: aiResult.headline, disclaimer: aiResult.disclaimer, scopeIncludes: aiResult.scopeIncludes, minUSD: aiResult.estimate.minUSD, maxUSD: aiResult.estimate.maxUSD } : undefined
     ),
     [projectType, aiResult]
@@ -359,11 +396,6 @@ export default function QuoteWizard({
   if (!isOpen) return null;
 
   const wantsFinancing = fundingChoice === "financing";
-  const displayQuote = (() => {
-    if (aiResult) return { min: aiResult.estimate.minUSD, max: aiResult.estimate.maxUSD, source: "ai" as const };
-    const fb = estimateProject({ projectType: (projectType as Parameters<typeof estimateProject>[0]["projectType"]) || "other", length: 20, width: 20, material: "other", style: "", upgrades: [], corners: 0, gates: 0 });
-    return { min: fb.minUSD, max: fb.maxUSD, source: "fallback" as const };
-  })();
 
   const canProceedStep1 = description.trim().length > 10 || photos.length > 0;
   const canProceedStep2 = contactName.trim().length > 0 && contactPhone.trim().length > 6;
@@ -802,45 +834,41 @@ export default function QuoteWizard({
                 </div>
               )}
 
-              {/* Headline */}
-              <div className="flex items-start justify-between border-b border-brand-border pb-4">
-                <div>
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-brand-gold uppercase tracking-widest">
-                    <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                    {displayQuote.source === "ai"
-                      ? `AI Estimate · ${aiResult!.estimate.confidence} confidence`
-                      : "Estimate (specs-based)"}
+              {aiResult ? (
+                <>
+                  {/* Headline */}
+                  <div className="flex items-start justify-between border-b border-brand-border pb-4">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-brand-gold uppercase tracking-widest">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                        AI Estimate · {aiResult.estimate.confidence} confidence
+                      </div>
+                      <h3 className="text-lg font-bold uppercase text-white mt-1 leading-snug">
+                        {aiResult.headline}
+                      </h3>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-bold uppercase text-white mt-1 leading-snug">
-                    {aiResult?.headline ?? "Project Cost Estimate"}
-                  </h3>
-                </div>
-              </div>
 
-              {/* Big range */}
-              <div className="bg-brand-black/60 border border-brand-gold/20 p-6 rounded-2xl text-center space-y-2">
-                <span className="text-[10px] uppercase tracking-widest text-brand-gray font-bold">Estimated Investment Range</span>
-                <div className="text-4xl font-extrabold text-brand-gold font-mono tracking-tight">
-                  {usd(displayQuote.min)} – {usd(displayQuote.max)}
-                </div>
-                {aiResult && (
-                  <p className="text-[11px] text-brand-gray">
-                    Timeline: <span className="text-white font-bold">{aiResult.timelineWeeks.min}–{aiResult.timelineWeeks.max} weeks</span>
-                    {" · "}
-                    Materials {usd(aiResult.breakdown.materialsUSD)} · Labour {usd(aiResult.breakdown.laborUSD)} · Permits {usd(aiResult.breakdown.permitsAndFeesUSD)}
-                  </p>
-                )}
-                {budgetRange && budgetRange !== "Prefer not to say" && (
-                  <p className="text-[10px] text-brand-gold/80 font-semibold">
-                    You mentioned a target around {budgetRange} — we&apos;ll work to hit that on the site visit.
-                  </p>
-                )}
-              </div>
+                  {/* Big range */}
+                  <div className="bg-brand-black/60 border border-brand-gold/20 p-6 rounded-2xl text-center space-y-2">
+                    <span className="text-[10px] uppercase tracking-widest text-brand-gray font-bold">Estimated Investment Range</span>
+                    <div className="text-4xl font-extrabold text-brand-gold font-mono tracking-tight">
+                      {usd(aiResult.estimate.minUSD)} – {usd(aiResult.estimate.maxUSD)}
+                    </div>
+                    <p className="text-[11px] text-brand-gray">
+                      Timeline: <span className="text-white font-bold">{aiResult.timelineWeeks.min}–{aiResult.timelineWeeks.max} weeks</span>
+                      {" · "}
+                      Materials {usd(aiResult.breakdown.materialsUSD)} · Labour {usd(aiResult.breakdown.laborUSD)} · Permits {usd(aiResult.breakdown.permitsAndFeesUSD)}
+                    </p>
+                    {budgetRange && budgetRange !== "Prefer not to say" && (
+                      <p className="text-[10px] text-brand-gold/80 font-semibold">
+                        You mentioned a target around {budgetRange} — we&apos;ll work to hit that on the site visit.
+                      </p>
+                    )}
+                  </div>
 
-              {/* Scope + risks */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {aiResult && (
-                  <>
+                  {/* Scope + risks */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-brand-gray">What this includes</span>
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
@@ -872,27 +900,69 @@ export default function QuoteWizard({
                         </p>
                       </div>
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
 
-              {aiResult && (
-                <p className="text-[10px] text-brand-gray italic border-t border-brand-border/40 pt-3">
-                  {aiResult.disclaimer}
-                </p>
+                  <p className="text-[10px] text-brand-gray italic border-t border-brand-border/40 pt-3">
+                    {aiResult.disclaimer}
+                  </p>
+
+                  {/* PDF download */}
+                  <div className="flex items-center gap-4 pt-1">
+                    <DownloadPdfButton
+                      filename={estimatePdfFilename(`EST-${sessionId.slice(0, 8).toUpperCase()}`, API_PROJECT_TYPE[projectType] ?? "other")}
+                      label="Download Estimate PDF"
+                      variant="wizard"
+                    />
+                    <p className="text-[10px] text-brand-gray flex-1">
+                      Branded line-item estimate — download and keep it.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                /* AI unavailable — be honest, never fabricate a number */
+                <div className="space-y-5">
+                  <div className="border-b border-brand-border pb-4">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-brand-gold uppercase tracking-widest">
+                      <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                      Got it — {projectLabel(projectType)}
+                    </div>
+                    <h3 className="text-lg font-bold uppercase text-white mt-1 leading-snug">
+                      Your details are in. Let&apos;s get you a real number.
+                    </h3>
+                  </div>
+
+                  <div className="bg-brand-black/60 border border-brand-gold/20 p-6 rounded-2xl space-y-3 text-center">
+                    <p className="text-sm text-white/90 leading-relaxed">
+                      Every job like yours is a little different — slapping a generic price
+                      on it would just be a guess, and we don&apos;t do guesses.
+                    </p>
+                    <p className="text-sm text-white/90 leading-relaxed">
+                      Jaryd will review your photos and details and bring you an
+                      <span className="text-brand-gold font-bold"> exact, no-surprises quote</span> on a
+                      quick free site visit — usually same week.
+                    </p>
+                    {budgetRange && budgetRange !== "Prefer not to say" && (
+                      <p className="text-[11px] text-brand-gold/80 font-semibold pt-1">
+                        You mentioned a target around {budgetRange} — we&apos;ll work hard to land under it.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { Icon: CheckCircle, t: "No obligation", s: "Free site visit, no pressure" },
+                      { Icon: Clock,       t: "Fast turnaround", s: "Quote usually same week" },
+                      { Icon: CreditCard,  t: "Financing available", s: "Pay-over-time options" },
+                    ].map(({ Icon, t, s }) => (
+                      <div key={t} className="p-3 rounded-xl border border-brand-border bg-brand-black/30 text-center space-y-1">
+                        <Icon className="w-5 h-5 text-brand-gold mx-auto" strokeWidth={1.75} />
+                        <div className="text-[11px] font-bold text-white uppercase tracking-wider">{t}</div>
+                        <div className="text-[10px] text-brand-gray leading-snug">{s}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-
-              {/* PDF download */}
-              <div className="flex items-center gap-4 pt-1">
-                <DownloadPdfButton
-                  filename={estimatePdfFilename(`EST-${sessionId.slice(0, 8).toUpperCase()}`, projectType)}
-                  label="Download Estimate PDF"
-                  variant="wizard"
-                />
-                <p className="text-[10px] text-brand-gray flex-1">
-                  Branded line-item estimate — download and keep it.
-                </p>
-              </div>
             </div>
           )}
 

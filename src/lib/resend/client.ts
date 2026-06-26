@@ -30,7 +30,11 @@ export function getResendClient(): Resend | null {
   return cached;
 }
 
-/** Default "from" — use onboarding@resend.dev until your domain is verified. */
+/**
+ * Default "from" address. Sends as Jaryd at the verified blacktimber.ca domain.
+ * Override with LEAD_FROM_EMAIL if needed. NOTE: the domain must be verified in
+ * Resend (Dashboard → Domains) before real sends to customers will succeed.
+ */
 export function defaultFromEmail(): string {
-  return process.env.LEAD_FROM_EMAIL?.trim() || "onboarding@resend.dev";
+  return process.env.LEAD_FROM_EMAIL?.trim() || "Jaryd · Black Timber <jaryd@blacktimber.ca>";
 }
